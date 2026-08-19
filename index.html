@@ -170,8 +170,8 @@ function Login({ onLogin }) {
 /* ---------- Formulario de proyecto (alta múltiple / edición) ---------- */
 const nuevoProyecto = () => ({
   _key: Date.now() + Math.random(),
-  codigo:"", categoria:"CI", prioridad:3, nombre:"", area:"", paisId:"",
-  responsable:"", ticket:"", fechaInicio:"", fechaFin:"", avance:0, estado:"Pendiente", observacion:""
+  codigo:"", categoria:"CI", prioridad:3, nombre:"", area:"", pais_id:"",
+  responsable:"", ticket:"", fecha_inicio:"", fecha_fin:"", avance:0, estado:"Pendiente", observacion:""
 });
 
 function ProjectModal({ paises, editProject, onClose, onSaved, onTareasChanged }) {
@@ -250,7 +250,7 @@ function ProjectModal({ paises, editProject, onClose, onSaved, onTareasChanged }
 
   const normalize = d => {
     const { _key, id, ...rest } = d;
-    return { ...rest, paisId: rest.paisId ? parseInt(rest.paisId) : null, prioridad: parseInt(rest.prioridad) || 3, avance: parseFloat(rest.avance) || 0 };
+    return { ...rest, pais_id: rest.pais_id ? parseInt(rest.pais_id) : null, prioridad: parseInt(rest.prioridad) || 3, avance: parseFloat(rest.avance) || 0 };
   };
 
   const save = async () => {
@@ -366,7 +366,7 @@ function ProjectModal({ paises, editProject, onClose, onSaved, onTareasChanged }
               </div>
               <div>
                 <label style={{...labelStyle,color:y.primary}}>País</label>
-                <select value={current.paisId} onChange={e => updateField(active,"paisId",e.target.value)} style={{...inputStyle,fontSize:12}}>
+                <select value={current.pais_id} onChange={e => updateField(active,"pais_id",e.target.value)} style={{...inputStyle,fontSize:12}}>
                   <option value="">—</option>
                   {paises.map(p => <option key={p.id} value={p.id}>{bandera(p.nombre)} {p.nombre}</option>)}
                 </select>
@@ -387,11 +387,11 @@ function ProjectModal({ paises, editProject, onClose, onSaved, onTareasChanged }
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
               <div>
                 <label style={{...labelStyle,color:y.primary}}>Fecha inicio</label>
-                <input type="date" value={current.fechaInicio} onChange={e => updateField(active,"fechaInicio",e.target.value)} style={{...inputStyle,fontSize:12}} />
+                <input type="date" value={current.fecha_inicio} onChange={e => updateField(active,"fecha_inicio",e.target.value)} style={{...inputStyle,fontSize:12}} />
               </div>
               <div>
                 <label style={{...labelStyle,color:y.primary}}>Fecha fin</label>
-                <input type="date" value={current.fechaFin} onChange={e => updateField(active,"fechaFin",e.target.value)} style={{...inputStyle,fontSize:12}} />
+                <input type="date" value={current.fecha_fin} onChange={e => updateField(active,"fecha_fin",e.target.value)} style={{...inputStyle,fontSize:12}} />
               </div>
             </div>
             <div style={{marginBottom:10}}>
@@ -565,7 +565,7 @@ function App() {
   const filtrados = useMemo(() => proyectos.filter(p =>
     (!filtroCategoria || p.categoria === filtroCategoria) &&
     (!filtroEstado || p.estado === filtroEstado) &&
-    (!filtroPais || p.paisId === parseInt(filtroPais))
+    (!filtroPais || p.pais_id === parseInt(filtroPais))
   ), [proyectos, filtroCategoria, filtroEstado, filtroPais]);
 
   const total = proyectos.length;
@@ -596,11 +596,11 @@ function App() {
       "Prioridad": p.prioridad === 1 ? "Alta" : p.prioridad === 2 ? "Media" : "Normal",
       "Nombre": p.nombre || "",
       "Área": p.area || "",
-      "País": nombrePais(p.paisId),
+      "País": nombrePais(p.pais_id),
       "Responsable": p.responsable || "",
       "Ticket": p.ticket || "",
-      "Fecha inicio": p.fechaInicio || "",
-      "Fecha fin": p.fechaFin || "",
+      "Fecha inicio": p.fecha_inicio || "",
+      "Fecha fin": p.fecha_fin || "",
       "Avance (%)": Math.round((parseFloat(p.avance)||0)*100),
       "Estado": p.estado || "",
       "Observación": p.observacion || ""
@@ -749,15 +749,15 @@ function App() {
                         </div>
                         <div style={{padding:"0.85rem 1rem"}}>
                           <div style={{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap"}}>
-                            {p.paisId && <div style={{fontSize:11,color:y.text2,display:"flex",alignItems:"center",gap:3}}><i className="ti ti-map-pin" style={{fontSize:11,color:y.text3}}/>{bandera(nombrePais(p.paisId))} {nombrePais(p.paisId)}</div>}
+                            {p.pais_id && <div style={{fontSize:11,color:y.text2,display:"flex",alignItems:"center",gap:3}}><i className="ti ti-map-pin" style={{fontSize:11,color:y.text3}}/>{bandera(nombrePais(p.pais_id))} {nombrePais(p.pais_id)}</div>}
                             {p.area && <div style={{fontSize:11,color:y.text2,display:"flex",alignItems:"center",gap:3}}><i className="ti ti-building" style={{fontSize:11,color:y.text3}}/>{p.area}</div>}
                             {p.responsable && <div style={{fontSize:11,color:y.text2,display:"flex",alignItems:"center",gap:3}}><i className="ti ti-user" style={{fontSize:11,color:y.text3}}/>{p.responsable}</div>}
                             {p.ticket && <div style={{fontSize:11,color:y.primary,fontWeight:600}}>Ticket #{p.ticket}</div>}
                           </div>
-                          {p.fechaInicio && (
+                          {p.fecha_inicio && (
                             <div style={{fontSize:10,color:y.text3,marginBottom:6,display:"flex",gap:8}}>
-                              <span><i className="ti ti-calendar-event"/> {p.fechaInicio}</span>
-                              {p.fechaFin && <span>→ {p.fechaFin}</span>}
+                              <span><i className="ti ti-calendar-event"/> {p.fecha_inicio}</span>
+                              {p.fecha_fin && <span>→ {p.fecha_fin}</span>}
                             </div>
                           )}
                           <div style={{marginBottom:10}}>
@@ -802,9 +802,9 @@ function App() {
                             <td style={{padding:"6px 8px",fontSize:12}}>{p.categoria}</td>
                             <td style={{padding:"6px 8px",fontSize:12,fontWeight:600,maxWidth:260}}>{p.nombre}</td>
                             <td style={{padding:"6px 8px",fontSize:12}}>{p.area}</td>
-                            <td style={{padding:"6px 8px",fontSize:12}}>{p.paisId ? bandera(nombrePais(p.paisId))+" "+nombrePais(p.paisId) : ""}</td>
+                            <td style={{padding:"6px 8px",fontSize:12}}>{p.pais_id ? bandera(nombrePais(p.pais_id))+" "+nombrePais(p.pais_id) : ""}</td>
                             <td style={{padding:"6px 8px",fontSize:12}}>{p.responsable}</td>
-                            <td style={{padding:"6px 8px",fontSize:11,color:y.text3}}>{p.fechaInicio}{p.fechaFin ? " → "+p.fechaFin : ""}</td>
+                            <td style={{padding:"6px 8px",fontSize:11,color:y.text3}}>{p.fecha_inicio}{p.fecha_fin ? " → "+p.fecha_fin : ""}</td>
                             <td style={{padding:"6px 8px",fontSize:12}}>{avancePct}%{tareasP.length > 0 && <div style={{fontSize:10,color:y.text3}}>{tareasP.filter(t=>t.completada).length}/{tareasP.length} tareas</div>}</td>
                             <td style={{padding:"6px 8px"}}><Badge label={p.estado || "Pendiente"} /></td>
                             <td style={{padding:"6px 8px",whiteSpace:"nowrap"}}>
