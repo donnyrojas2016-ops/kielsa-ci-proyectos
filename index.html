@@ -589,6 +589,21 @@ function App() {
     }
   };
 
+  // Usado por el Kanban al soltar una tarjeta en otra columna.
+  const cambiarEstado = async (id, nuevoEstado) => {
+    const anterior = proyectos.find(p => p.id === id);
+    if (!anterior || anterior.estado === nuevoEstado) return;
+    setProyectos(list => list.map(p => p.id === id ? { ...p, estado: nuevoEstado } : p)); // optimista
+    try {
+      const { error } = await supabase.from("proyectos").update({ estado: nuevoEstado }).eq("id", id);
+      if (error) throw error;
+    } catch (e) {
+      console.error(e);
+      alert("No se pudo mover el proyecto: " + (e.message || e));
+      setProyectos(list => list.map(p => p.id === id ? anterior : p)); // revertir
+    }
+  };
+
   const exportarExcel = () => {
     const filas = filtrados.map(p => ({
       "Código": p.codigo || "",
@@ -709,9 +724,9 @@ function App() {
                       {paises.map(p => <option key={p.id} value={p.id}>{bandera(p.nombre)} {p.nombre}</option>)}
                     </select>
                     <div style={{display:"flex",border:"1px solid "+y.border2,borderRadius:6,overflow:"hidden"}}>
-                      {["tarjetas","tabla"].map(v => (
-                        <button key={v} onClick={() => setView(v)} style={{padding:"0.28rem 0.6rem",border:"none",background: view===v ? y.primary : y.surface, color: view===v ? "#fff" : y.text2, cursor:"pointer",fontSize:11,fontWeight:600}}>
-                          <i className={"ti "+(v==="tarjetas"?"ti-layout-grid":"ti-list")}/>
+                      {["tarjetas","kanban","tabla"].map(v => (
+                        <button key={v} title={v==="tarjetas"?"Tarjetas":v==="kanban"?"Kanban":"Tabla"} onClick={() => setView(v)} style={{padding:"0.28rem 0.6rem",border:"none",background: view===v ? y.primary : y.surface, color: view===v ? "#fff" : y.text2, cursor:"pointer",fontSize:11,fontWeight:600}}>
+                          <i className={"ti "+(v==="tarjetas"?"ti-layout-grid":v==="kanban"?"ti-layout-kanban":"ti-list")}/>
                         </button>
                       ))}
                     </div>
@@ -774,6 +789,51 @@ function App() {
                             <Btn sm onClick={() => setModal({mode:"edit", project:p})}><i className="ti ti-pencil"/> Editar</Btn>
                             <Btn sm danger onClick={() => setToDelete(p)}><i className="ti ti-trash"/></Btn>
                           </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : view === "kanban" ? (
+                <div style={{padding:"1rem",display:"flex",gap:12,overflowX:"auto"}}>
+                  {ESTADOS.map(estado => {
+                    const items = filtrados.filter(p => (p.estado || "Pendiente") === estado);
+                    const [colBg, colColor] = ESTADO_COLOR[estado] || [y.grayBg, y.gray];
+                    return (
+                      <div key={estado}
+                        onDragOver={e => e.preventDefault()}
+                        onDrop={e => { e.preventDefault(); const id = parseInt(e.dataTransfer.getData("text/plain")); if (id) cambiarEstado(id, estado); }}
+                        style={{minWidth:250,width:250,flexShrink:0,background:y.grayBg,borderRadius:10,padding:"0.6rem",display:"flex",flexDirection:"column"}}>
+                        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0.3rem 0.4rem",marginBottom:8}}>
+                          <span style={{fontSize:11,fontWeight:700,color:colColor}}>{estado}</span>
+                          <span style={{fontSize:10,fontWeight:700,color:y.text3,background:y.surface,borderRadius:10,padding:"1px 8px"}}>{items.length}</span>
+                        </div>
+                        <div style={{display:"flex",flexDirection:"column",gap:8,minHeight:60}}>
+                          {items.length === 0 && <div style={{fontSize:11,color:y.text3,textAlign:"center",padding:"1rem 0"}}>Sin proyectos</div>}
+                          {items.map(p => {
+                            const tareasP = tareasPorProyecto[p.id] || [];
+                            const avancePct = Math.round(avanceEfectivo(p, tareasP)*100);
+                            const { c: catColor, bg: catBg } = CATEGORIA_ICONOS[p.categoria] || { c:y.gray, bg:y.grayBg };
+                            return (
+                              <div key={p.id} draggable
+                                onDragStart={e => e.dataTransfer.setData("text/plain", String(p.id))}
+                                onClick={() => setModal({mode:"edit", project:p})}
+                                style={{background:y.surface,border:"1px solid "+y.border,borderRadius:8,padding:"0.6rem 0.7rem",cursor:"grab",boxShadow:"0 1px 3px rgba(0,0,0,.05)"}}>
+                                <div style={{fontSize:11,fontWeight:700,color:y.text,marginBottom:6,lineHeight:1.3}}>{p.nombre}</div>
+                                <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6}}>
+                                  <span style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:8,background:catBg,color:catColor}}>{p.categoria}</span>
+                                  {p.prioridad === 1 && <span style={{fontSize:9,fontWeight:700,color:y.danger}}>ALTA</span>}
+                                </div>
+                                <div style={{height:5,background:y.border,borderRadius:3,overflow:"hidden",marginBottom:4}}>
+                                  <div style={{height:"100%",width:avancePct+"%",background:y.primary,borderRadius:3}}/>
+                                </div>
+                                <div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:y.text3}}>
+                                  <span>{p.responsable || "—"}</span>
+                                  <span>{avancePct}%</span>
+                                </div>
+                              </div>
+                            );
+                          })}
                         </div>
                       </div>
                     );

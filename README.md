@@ -25,7 +25,7 @@ Usa el mismo usuario y contraseña que ya usas para entrar a Kielsa CI (se valid
 - KPIs (total, cumplidos, en progreso, pendientes, avance promedio).
 - Resumen por categoría (CI, Power Automate, Nuevo Proyecto) con filtro al hacer clic.
 - Filtros por categoría, estado y país.
-- Vista de tarjetas y vista de tabla.
+- Vista de tarjetas, vista Kanban (arrastra un proyecto entre columnas para cambiar su estado) y vista de tabla.
 - Agregar proyectos (uno o varios a la vez, mismo formulario tipo pestañas que usas en Hallazgos).
 - Editar y eliminar proyectos.
 - Exportar a Excel la lista filtrada.
