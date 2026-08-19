@@ -61,6 +61,16 @@ const ESTADO_COLOR = {
   "Cancelado": [y.grayBg, y.gray]
 };
 
+// Si el proyecto tiene tareas, el avance se calcula solo (completas / total).
+// Si no tiene tareas todavía, se usa el % que la persona escribió a mano (compatibilidad con proyectos existentes).
+function avanceEfectivo(proyecto, tareasDelProyecto) {
+  if (tareasDelProyecto && tareasDelProyecto.length > 0) {
+    const completas = tareasDelProyecto.filter(t => t.completada).length;
+    return completas / tareasDelProyecto.length;
+  }
+  return parseFloat(proyecto.avance) || 0;
+}
+
 /* ---------- Componentes base ---------- */
 function Badge({ label }) {
   const [bg, color] = ESTADO_COLOR[label] || [y.grayBg, y.gray];
@@ -164,10 +174,75 @@ const nuevoProyecto = () => ({
   responsable:"", ticket:"", fechaInicio:"", fechaFin:"", avance:0, estado:"Pendiente", observacion:""
 });
 
-function ProjectModal({ paises, editProject, onClose, onSaved }) {
+function ProjectModal({ paises, editProject, onClose, onSaved, onTareasChanged }) {
   const [drafts, setDrafts] = useState(() => editProject ? [{ ...editProject }] : [nuevoProyecto()]);
   const [active, setActive] = useState(0);
   const [saving, setSaving] = useState(false);
+
+  // ---- Tareas del proyecto (solo aplica en modo edición, sobre un proyecto ya guardado) ----
+  const [tareasProyecto, setTareasProyecto] = useState([]);
+  const [cargandoTareas, setCargandoTareas] = useState(false);
+  const [tareasDisponibles, setTareasDisponibles] = useState(true);
+  const [nuevaTarea, setNuevaTarea] = useState("");
+
+  useEffect(() => {
+    if (!editProject) return;
+    (async () => {
+      setCargandoTareas(true);
+      try {
+        const { data, error } = await supabase.from("proyecto_tareas").select("*").eq("proyectoId", editProject.id).order("id");
+        if (error) throw error;
+        setTareasProyecto(data || []);
+        setTareasDisponibles(true);
+      } catch (e) {
+        console.warn("Tabla proyecto_tareas no disponible:", e.message || e);
+        setTareasDisponibles(false);
+      } finally {
+        setCargandoTareas(false);
+      }
+    })();
+  }, [editProject]);
+
+  const agregarTarea = async () => {
+    const titulo = nuevaTarea.trim();
+    if (!titulo || !editProject) return;
+    try {
+      const { data, error } = await supabase.from("proyecto_tareas").insert({ proyectoId: editProject.id, titulo, completada: false }).select();
+      if (error) throw error;
+      setTareasProyecto(list => [...list, ...(data || [])]);
+      setNuevaTarea("");
+      onTareasChanged && onTareasChanged();
+    } catch (e) {
+      alert("No se pudo agregar la tarea: " + (e.message || e));
+    }
+  };
+
+  const toggleTarea = async (tarea) => {
+    setTareasProyecto(list => list.map(t => t.id === tarea.id ? { ...t, completada: !tarea.completada } : t));
+    try {
+      const { error } = await supabase.from("proyecto_tareas").update({ completada: !tarea.completada }).eq("id", tarea.id);
+      if (error) throw error;
+      onTareasChanged && onTareasChanged();
+    } catch (e) {
+      alert("No se pudo actualizar la tarea: " + (e.message || e));
+      setTareasProyecto(list => list.map(t => t.id === tarea.id ? { ...t, completada: tarea.completada } : t));
+    }
+  };
+
+  const eliminarTarea = async (tarea) => {
+    setTareasProyecto(list => list.filter(t => t.id !== tarea.id));
+    try {
+      const { error } = await supabase.from("proyecto_tareas").delete().eq("id", tarea.id);
+      if (error) throw error;
+      onTareasChanged && onTareasChanged();
+    } catch (e) {
+      alert("No se pudo eliminar la tarea: " + (e.message || e));
+      setTareasProyecto(list => [...list, tarea]);
+    }
+  };
+
+  const tareasCompletas = tareasProyecto.filter(t => t.completada).length;
+  const avancePctTareas = tareasProyecto.length ? Math.round((tareasCompletas / tareasProyecto.length) * 100) : 0;
 
   const updateField = (idx, key, value) => setDrafts(list => list.map((d, i) => i === idx ? { ...d, [key]: value } : d));
   const addDraft = () => { const n = drafts.length; setDrafts(list => [...list, nuevoProyecto()]); setActive(n); };
@@ -321,16 +396,59 @@ function ProjectModal({ paises, editProject, onClose, onSaved }) {
             </div>
             <div style={{marginBottom:10}}>
               <label style={{...labelStyle,color:y.primary}}>Avance</label>
-              <div style={{display:"flex",alignItems:"center",gap:8}}>
-                <input type="range" min={0} max={100} value={Math.round((current.avance||0)*100) <= 100 ? Math.round((current.avance||0)*100) : current.avance||0} onChange={e => updateField(active,"avance",parseInt(e.target.value)/100)} style={{flex:1}} />
-                <span style={{fontSize:12,fontWeight:700,color:y.primary,minWidth:32}}>{Math.round((current.avance||0)*100)}%</span>
-              </div>
+              {editProject && tareasDisponibles && tareasProyecto.length > 0 ? (
+                <React.Fragment>
+                  <div style={{display:"flex",alignItems:"center",gap:8}}>
+                    <div style={{flex:1,height:8,background:y.border,borderRadius:4,overflow:"hidden"}}>
+                      <div style={{height:"100%",borderRadius:4,background:y.primary,width:avancePctTareas+"%"}}/>
+                    </div>
+                    <span style={{fontSize:12,fontWeight:700,color:y.primary,minWidth:80,textAlign:"right"}}>{avancePctTareas}% ({tareasCompletas}/{tareasProyecto.length})</span>
+                  </div>
+                  <div style={{fontSize:10,color:y.text3,marginTop:4}}>Se calcula solo, según las tareas completadas abajo.</div>
+                </React.Fragment>
+              ) : (
+                <div style={{display:"flex",alignItems:"center",gap:8}}>
+                  <input type="range" min={0} max={100} value={Math.round((current.avance||0)*100) <= 100 ? Math.round((current.avance||0)*100) : current.avance||0} onChange={e => updateField(active,"avance",parseInt(e.target.value)/100)} style={{flex:1}} />
+                  <span style={{fontSize:12,fontWeight:700,color:y.primary,minWidth:32}}>{Math.round((current.avance||0)*100)}%</span>
+                </div>
+              )}
             </div>
             <div>
               <label style={{...labelStyle,color:y.primary}}>Observación</label>
               <textarea value={current.observacion} onChange={e => updateField(active,"observacion",e.target.value)} rows={3} placeholder="Notas adicionales sobre el proyecto..." style={{...inputStyle,width:"100%",resize:"vertical",fontSize:12,lineHeight:1.6}} />
             </div>
           </div>
+
+          {editProject && (
+            <div style={{background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:10,padding:"1rem",marginBottom:14}}>
+              <div style={{fontSize:12,fontWeight:700,color:"#166534",marginBottom:12,display:"flex",alignItems:"center",gap:6}}>
+                <i className="ti ti-checklist"/> Tareas del proyecto
+                {tareasProyecto.length > 0 && <span style={{fontWeight:400,color:y.text3,marginLeft:4}}>({tareasCompletas}/{tareasProyecto.length} completas)</span>}
+              </div>
+              {!tareasDisponibles ? (
+                <div style={{fontSize:12,color:y.text3}}>Esta función todavía no está activada en la base de datos (falta crear la tabla "proyecto_tareas").</div>
+              ) : cargandoTareas ? (
+                <div style={{fontSize:12,color:y.text3}}>Cargando tareas...</div>
+              ) : (
+                <React.Fragment>
+                  <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:10}}>
+                    {tareasProyecto.length === 0 && <div style={{fontSize:12,color:y.text3}}>Sin tareas todavía — agrega la primera abajo.</div>}
+                    {tareasProyecto.map(t => (
+                      <div key={t.id} style={{display:"flex",alignItems:"center",gap:8,background:y.surface,border:"1px solid "+y.border,borderRadius:8,padding:"6px 10px"}}>
+                        <input type="checkbox" checked={!!t.completada} onChange={() => toggleTarea(t)} style={{width:16,height:16,cursor:"pointer",flexShrink:0}} />
+                        <span style={{flex:1,fontSize:12,color:t.completada?y.text3:y.text,textDecoration:t.completada?"line-through":"none"}}>{t.titulo}</span>
+                        <button onClick={() => eliminarTarea(t)} style={{background:"none",border:"none",color:y.text3,cursor:"pointer",fontSize:15,lineHeight:1,padding:2}}>×</button>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{display:"flex",gap:6}}>
+                    <input value={nuevaTarea} onChange={e => setNuevaTarea(e.target.value)} onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); agregarTarea(); } }} placeholder="Nueva tarea..." style={{...inputStyle,fontSize:12}} />
+                    <Btn sm onClick={agregarTarea}><i className="ti ti-plus"/></Btn>
+                  </div>
+                </React.Fragment>
+              )}
+            </div>
+          )}
         </div>
 
         <div style={{padding:"0.75rem 1.25rem",borderTop:"1px solid "+y.border,display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0,background:y.grayBg}}>
@@ -380,6 +498,7 @@ function App() {
   });
   const [proyectos, setProyectos] = useState([]);
   const [paises, setPaises] = useState([]);
+  const [tareas, setTareas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState("tarjetas");
   const [filtroCategoria, setFiltroCategoria] = useState("");
@@ -403,12 +522,33 @@ function App() {
     } catch (e) {
       console.error(e);
       alert("No se pudieron cargar los datos: " + (e.message || e));
-    } finally {
-      setLoading(false);
+    }
+    await cargarTareas();
+    setLoading(false);
+  };
+
+  const cargarTareas = async () => {
+    try {
+      const { data, error } = await supabase.from("proyecto_tareas").select("*").order("id");
+      if (error) throw error;
+      setTareas(data || []);
+    } catch (e) {
+      // Tabla todavía no creada en Supabase: la app sigue funcionando con el avance manual.
+      console.warn("proyecto_tareas no disponible:", e.message || e);
+      setTareas([]);
     }
   };
 
   useEffect(() => { if (session) cargarDatos(); }, [session]);
+
+  const tareasPorProyecto = useMemo(() => {
+    const map = {};
+    tareas.forEach(t => {
+      if (!map[t.proyectoId]) map[t.proyectoId] = [];
+      map[t.proyectoId].push(t);
+    });
+    return map;
+  }, [tareas]);
 
   const login = (user) => {
     setSession(user);
@@ -432,7 +572,7 @@ function App() {
   const cumplidos = proyectos.filter(p => p.estado === "Cumplido").length;
   const enProgreso = proyectos.filter(p => ["En progreso","En dimensionamiento"].includes(p.estado)).length;
   const pendientes = proyectos.filter(p => p.estado === "Pendiente").length;
-  const avancePromedio = total ? Math.round(proyectos.reduce((s,p) => s + (parseFloat(p.avance)||0), 0) / total * 100) : 0;
+  const avancePromedio = total ? Math.round(proyectos.reduce((s,p) => s + avanceEfectivo(p, tareasPorProyecto[p.id]), 0) / total * 100) : 0;
 
   const eliminar = async () => {
     setDeleting(true);
@@ -527,7 +667,7 @@ function App() {
             <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:16}}>
               {CATEGORIAS.map(cat => {
                 const items = proyectos.filter(p => p.categoria === cat);
-                const avance = items.length ? Math.round(items.reduce((s,p) => s+(parseFloat(p.avance)||0),0)/items.length*100) : 0;
+                const avance = items.length ? Math.round(items.reduce((s,p) => s+avanceEfectivo(p, tareasPorProyecto[p.id]),0)/items.length*100) : 0;
                 const { c, bg, ic } = CATEGORIA_ICONOS[cat] || { c:y.gray, bg:y.grayBg, ic:"ti-folder" };
                 return (
                   <div key={cat} onClick={() => setFiltroCategoria(filtroCategoria === cat ? "" : cat)} style={{background:y.surface,border:"2px solid "+(filtroCategoria===cat?c:y.border),borderRadius:12,padding:"0.85rem 1rem",cursor:"pointer"}}>
@@ -591,7 +731,8 @@ function App() {
                   )}
                   {filtrados.map(p => {
                     const { c, bg } = CATEGORIA_ICONOS[p.categoria] || { c:y.gray, bg:y.grayBg };
-                    const avancePct = Math.round((parseFloat(p.avance)||0)*100);
+                    const tareasP = tareasPorProyecto[p.id] || [];
+                    const avancePct = Math.round(avanceEfectivo(p, tareasP)*100);
                     const avanceColor = avancePct>=80?y.success:avancePct>=50?y.warning:y.danger;
                     return (
                       <div key={p.id} style={{background:y.surface,border:"1px solid "+y.border,borderRadius:12,overflow:"hidden",boxShadow:"0 1px 4px rgba(0,0,0,.06)"}}>
@@ -621,7 +762,7 @@ function App() {
                           )}
                           <div style={{marginBottom:10}}>
                             <div style={{display:"flex",justifyContent:"space-between",fontSize:11,marginBottom:4}}>
-                              <span style={{color:y.text2,fontWeight:600}}>Avance</span>
+                              <span style={{color:y.text2,fontWeight:600}}>Avance{tareasP.length > 0 && " · " + tareasP.filter(t=>t.completada).length + "/" + tareasP.length + " tareas"}</span>
                               <span style={{color:avanceColor,fontWeight:700}}>{avancePct}%</span>
                             </div>
                             <div style={{height:8,background:y.border,borderRadius:4,overflow:"hidden"}}>
@@ -653,7 +794,8 @@ function App() {
                         <tr><td colSpan={10} style={{padding:"2rem",textAlign:"center",color:y.text3}}>Sin proyectos</td></tr>
                       )}
                       {filtrados.map(p => {
-                        const avancePct = Math.round((parseFloat(p.avance)||0)*100);
+                        const tareasP = tareasPorProyecto[p.id] || [];
+                        const avancePct = Math.round(avanceEfectivo(p, tareasP)*100);
                         return (
                           <tr key={p.id} style={{borderBottom:"1px solid "+y.border}}>
                             <td style={{padding:"6px 8px",fontSize:12}}>{p.codigo}</td>
@@ -663,7 +805,7 @@ function App() {
                             <td style={{padding:"6px 8px",fontSize:12}}>{p.paisId ? bandera(nombrePais(p.paisId))+" "+nombrePais(p.paisId) : ""}</td>
                             <td style={{padding:"6px 8px",fontSize:12}}>{p.responsable}</td>
                             <td style={{padding:"6px 8px",fontSize:11,color:y.text3}}>{p.fechaInicio}{p.fechaFin ? " → "+p.fechaFin : ""}</td>
-                            <td style={{padding:"6px 8px",fontSize:12}}>{avancePct}%</td>
+                            <td style={{padding:"6px 8px",fontSize:12}}>{avancePct}%{tareasP.length > 0 && <div style={{fontSize:10,color:y.text3}}>{tareasP.filter(t=>t.completada).length}/{tareasP.length} tareas</div>}</td>
                             <td style={{padding:"6px 8px"}}><Badge label={p.estado || "Pendiente"} /></td>
                             <td style={{padding:"6px 8px",whiteSpace:"nowrap"}}>
                               <Btn sm onClick={() => setModal({mode:"edit", project:p})}><i className="ti ti-pencil"/></Btn>{" "}
@@ -687,6 +829,7 @@ function App() {
           editProject={modal.mode === "edit" ? modal.project : null}
           onClose={() => setModal(null)}
           onSaved={() => { setModal(null); cargarDatos(); }}
+          onTareasChanged={cargarTareas}
         />
       )}
       {toDelete && (
