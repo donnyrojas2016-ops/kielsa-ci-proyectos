@@ -620,30 +620,165 @@ function ConfirmDelete({ nombre, onConfirm, onClose, deleting }) {
   );
 }
 
-/* ---------- Usuarios y permisos ---------- */
-/* ---------- Usuarios (solo lectura) ---------- */
-function UsuariosView() {
+/* ---------- Usuarios (administrar: crear, editar, inactivar, país) ---------- */
+function UsuarioFormModal({ paises, editUser, editPaisId, onClose, onSaved }) {
+  const [usuario, setUsuario] = useState(editUser ? editUser.usuario || "" : "");
+  const [password, setPassword] = useState("");
+  const [nombre, setNombre] = useState(editUser ? editUser.nombre || "" : "");
+  const [estado, setEstado] = useState(editUser ? editUser.estado || "Activo" : "Activo");
+  const [paisId, setPaisId] = useState(editPaisId || "");
+  const [saving, setSaving] = useState(false);
+
+  const guardar = async () => {
+    if (!usuario.trim() || !nombre.trim()) { alert("Usuario y nombre son requeridos."); return; }
+    if (!editUser && !password.trim()) { alert("La contraseña es requerida para un usuario nuevo."); return; }
+    setSaving(true);
+    try {
+      // evitar usuario duplicado
+      const { data: existentes, error: eDup } = await supabase.from("usuarios").select("id").eq("usuario", usuario.trim());
+      if (eDup) throw eDup;
+      if ((existentes || []).some(x => x.id !== (editUser && editUser.id))) {
+        alert("Ya existe un usuario con ese nombre de usuario.");
+        setSaving(false);
+        return;
+      }
+
+      let usuarioId = editUser ? editUser.id : null;
+      if (editUser) {
+        const payload = { usuario: usuario.trim(), nombre: nombre.trim(), estado };
+        if (password.trim()) payload.password = password.trim();
+        const { error } = await supabase.from("usuarios").update(payload).eq("id", editUser.id);
+        if (error) throw error;
+      } else {
+        const { data, error } = await supabase.from("usuarios").insert([{ usuario: usuario.trim(), password: password.trim(), nombre: nombre.trim(), estado }]).select();
+        if (error) throw error;
+        usuarioId = data && data[0] && data[0].id;
+      }
+
+      if (usuarioId) {
+        try {
+          if (paisId) {
+            const { data: fila } = await supabase.from("proyecto_usuario_paises").select("id").eq("usuarioId", usuarioId);
+            if (fila && fila.length > 0) {
+              await supabase.from("proyecto_usuario_paises").update({ pais_id: paisId }).eq("usuarioId", usuarioId);
+            } else {
+              await supabase.from("proyecto_usuario_paises").insert([{ usuarioId, pais_id: paisId }]);
+            }
+          } else if (editPaisId) {
+            await supabase.from("proyecto_usuario_paises").delete().eq("usuarioId", usuarioId);
+          }
+        } catch (e) {
+          console.warn("proyecto_usuario_paises no disponible:", e.message || e);
+        }
+      }
+
+      onSaved();
+      onClose();
+    } catch (e) {
+      alert("No se pudo guardar: " + (e.message || e));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(15,23,42,.6)",zIndex:600,display:"flex",alignItems:"center",justifyContent:"center"}} onClick={e => e.target === e.currentTarget && onClose()}>
+      <div style={{background:y.surface,borderRadius:12,padding:"1.5rem",width:420,maxWidth:"92vw",boxShadow:"0 20px 50px rgba(0,0,0,.3)"}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
+          <strong style={{fontSize:15,color:y.text}}>{editUser ? "Editar usuario" : "Agregar usuario"}</strong>
+          <button onClick={onClose} style={{background:"none",border:"none",color:y.text3,cursor:"pointer",fontSize:18,lineHeight:1}}>✕</button>
+        </div>
+        <div style={{display:"flex",flexDirection:"column",gap:12}}>
+          <div>
+            <label style={{fontSize:11,fontWeight:700,color:y.text3,textTransform:"uppercase"}}>Usuario *</label>
+            <input value={usuario} onChange={e => setUsuario(e.target.value)} style={{...inputStyle, marginTop:4}} placeholder="nombre.apellido" />
+          </div>
+          <div>
+            <label style={{fontSize:11,fontWeight:700,color:y.text3,textTransform:"uppercase"}}>{editUser ? "Contraseña (vacío = sin cambiar)" : "Contraseña *"}</label>
+            <input type="password" value={password} onChange={e => setPassword(e.target.value)} style={{...inputStyle, marginTop:4}} placeholder="••••••••" />
+          </div>
+          <div>
+            <label style={{fontSize:11,fontWeight:700,color:y.text3,textTransform:"uppercase"}}>Nombre completo *</label>
+            <input value={nombre} onChange={e => setNombre(e.target.value)} style={{...inputStyle, marginTop:4}} placeholder="Nombre Apellido" />
+          </div>
+          <div style={{display:"flex",gap:10}}>
+            <div style={{flex:1}}>
+              <label style={{fontSize:11,fontWeight:700,color:y.text3,textTransform:"uppercase"}}>País</label>
+              <select value={paisId} onChange={e => setPaisId(e.target.value ? parseInt(e.target.value) : "")} style={{...inputStyle, marginTop:4}}>
+                <option value="">—</option>
+                {paises.map(p => <option key={p.id} value={p.id}>{bandera(p.nombre)} {p.nombre}</option>)}
+              </select>
+            </div>
+            <div style={{flex:1}}>
+              <label style={{fontSize:11,fontWeight:700,color:y.text3,textTransform:"uppercase"}}>Estado</label>
+              <select value={estado} onChange={e => setEstado(e.target.value)} style={{...inputStyle, marginTop:4}}>
+                <option>Activo</option>
+                <option>Inactivo</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div style={{display:"flex",justifyContent:"flex-end",gap:8,marginTop:20}}>
+          <Btn onClick={onClose} disabled={saving}>Cancelar</Btn>
+          <Btn primary onClick={guardar} disabled={saving}>{saving ? "Guardando..." : "Guardar"}</Btn>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function UsuariosView({ paises, usuarioPaises, usuarioPaisesDisponibles, onChanged }) {
   const [usuarios, setUsuarios] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [formAbierto, setFormAbierto] = useState(null); // null | {} (nuevo) | usuario (editar)
 
-  useEffect(() => {
-    (async () => {
-      setLoading(true);
-      try {
-        const { data, error } = await supabase.from("usuarios").select("*").order("nombre");
-        if (error) throw error;
-        setUsuarios(data || []);
-      } catch (e) {
-        console.error(e);
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, []);
+  const cargar = async () => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.from("usuarios").select("*").order("nombre");
+      if (error) throw error;
+      setUsuarios(data || []);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { cargar(); }, []);
+
+  const paisDe = usuarioId => {
+    const fila = (usuarioPaises || []).find(x => x.usuarioId === usuarioId);
+    if (!fila || !fila.pais_id) return null;
+    const p = (paises || []).find(x => x.id === fila.pais_id);
+    return p || null;
+  };
+
+  const toggleEstado = async u => {
+    const nuevo = u.estado === "Activo" ? "Inactivo" : "Activo";
+    setUsuarios(prev => prev.map(x => x.id === u.id ? { ...x, estado: nuevo } : x));
+    try {
+      const { error } = await supabase.from("usuarios").update({ estado: nuevo }).eq("id", u.id);
+      if (error) throw error;
+    } catch (e) {
+      setUsuarios(prev => prev.map(x => x.id === u.id ? { ...x, estado: u.estado } : x));
+      alert("No se pudo cambiar el estado: " + (e.message || e));
+    }
+  };
 
   return (
     <Card mb={0}>
-      <CardHeader icon="ti-users" left={"Usuarios (" + usuarios.length + ")"} right={<span style={{fontSize:11,color:y.text3}}>Cuentas que pueden entrar a esta página (misma base que Kielsa CI)</span>} />
+      <CardHeader icon="ti-users" left={"Usuarios (" + usuarios.length + ")"} right={
+        <React.Fragment>
+          <span style={{fontSize:11,color:y.text3}}>Cuentas que pueden entrar a esta página (misma base que Kielsa CI)</span>
+          <Btn sm primary onClick={() => setFormAbierto({})}><i className="ti ti-user-plus"/> Agregar usuario</Btn>
+        </React.Fragment>
+      } />
+      {!usuarioPaisesDisponibles && (
+        <div style={{padding:"0.6rem 1.1rem",fontSize:11.5,color:y.text3,background:"#fffbea",borderBottom:"1px solid "+y.border}}>
+          El campo de país por usuario todavía no está activado en Supabase (ver README). Mientras tanto no se muestra ni se puede asignar.
+        </div>
+      )}
       {loading ? (
         <div style={{padding:"2rem",textAlign:"center",fontSize:12,color:y.text3}}>Cargando...</div>
       ) : (
@@ -652,24 +787,47 @@ function UsuariosView() {
             <tr style={{background:y.grayBg}}>
               <th style={{padding:"0.5rem 0.75rem",textAlign:"left",fontSize:10,fontWeight:700,color:y.text3,textTransform:"uppercase"}}>Nombre</th>
               <th style={{padding:"0.5rem 0.75rem",textAlign:"left",fontSize:10,fontWeight:700,color:y.text3,textTransform:"uppercase"}}>Usuario</th>
+              <th style={{padding:"0.5rem 0.75rem",textAlign:"left",fontSize:10,fontWeight:700,color:y.text3,textTransform:"uppercase"}}>País</th>
               <th style={{padding:"0.5rem 0.75rem",textAlign:"left",fontSize:10,fontWeight:700,color:y.text3,textTransform:"uppercase"}}>Estado</th>
+              <th style={{padding:"0.5rem 0.75rem",textAlign:"right",fontSize:10,fontWeight:700,color:y.text3,textTransform:"uppercase"}}>Acciones</th>
             </tr>
           </thead>
           <tbody>
             {usuarios.length === 0 && (
-              <tr><td colSpan={3} style={{padding:"1.5rem",textAlign:"center",color:y.text3,fontSize:12}}>Sin usuarios</td></tr>
+              <tr><td colSpan={5} style={{padding:"1.5rem",textAlign:"center",color:y.text3,fontSize:12}}>Sin usuarios</td></tr>
             )}
-            {usuarios.map(u => (
-              <tr key={u.id} style={{borderTop:"1px solid "+y.border}}>
-                <td style={{padding:"0.55rem 0.75rem",fontSize:12.5,fontWeight:700,color:y.text}}>{u.nombre || "—"}</td>
-                <td style={{padding:"0.55rem 0.75rem",fontSize:12.5,color:y.text2}}>{u.usuario}</td>
-                <td style={{padding:"0.55rem 0.75rem"}}>
-                  <span style={{display:"inline-flex",alignItems:"center",padding:"3px 10px",borderRadius:20,fontSize:11,fontWeight:700,background: u.estado==="Activo" ? y.successBg : y.grayBg, color: u.estado==="Activo" ? y.success : y.gray}}>{u.estado || "—"}</span>
-                </td>
-              </tr>
-            ))}
+            {usuarios.map(u => {
+              const pais = paisDe(u.id);
+              return (
+                <tr key={u.id} style={{borderTop:"1px solid "+y.border}}>
+                  <td style={{padding:"0.55rem 0.75rem",fontSize:12.5,fontWeight:700,color:y.text}}>{u.nombre || "—"}</td>
+                  <td style={{padding:"0.55rem 0.75rem",fontSize:12.5,color:y.text2}}>{u.usuario}</td>
+                  <td style={{padding:"0.55rem 0.75rem",fontSize:12.5,color:y.text2}}>
+                    {usuarioPaisesDisponibles ? (pais ? (bandera(pais.nombre) + " " + pais.nombre) : "—") : "—"}
+                  </td>
+                  <td style={{padding:"0.55rem 0.75rem"}}>
+                    <span style={{display:"inline-flex",alignItems:"center",padding:"3px 10px",borderRadius:20,fontSize:11,fontWeight:700,background: u.estado==="Activo" ? y.successBg : y.grayBg, color: u.estado==="Activo" ? y.success : y.gray}}>{u.estado || "—"}</span>
+                  </td>
+                  <td style={{padding:"0.55rem 0.75rem",textAlign:"right",whiteSpace:"nowrap"}}>
+                    <Btn sm onClick={() => setFormAbierto(u)}><i className="ti ti-pencil"/> Editar</Btn>{" "}
+                    <Btn sm onClick={() => toggleEstado(u)}>
+                      <i className={"ti "+(u.estado === "Activo" ? "ti-lock" : "ti-lock-open")}/> {u.estado === "Activo" ? "Inactivar" : "Activar"}
+                    </Btn>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
+      )}
+      {formAbierto !== null && (
+        <UsuarioFormModal
+          paises={paises || []}
+          editUser={formAbierto && formAbierto.id ? formAbierto : null}
+          editPaisId={formAbierto && formAbierto.id ? (paisDe(formAbierto.id) ? paisDe(formAbierto.id).id : "") : ""}
+          onClose={() => setFormAbierto(null)}
+          onSaved={() => { cargar(); onChanged && onChanged(); }}
+        />
       )}
     </Card>
   );
@@ -941,6 +1099,8 @@ function App() {
   const [areasDisponibles, setAreasDisponibles] = useState(true);
   const [responsables, setResponsables] = useState([]);
   const [responsablesDisponibles, setResponsablesDisponibles] = useState(true);
+  const [usuarioPaises, setUsuarioPaises] = useState([]);
+  const [usuarioPaisesDisponibles, setUsuarioPaisesDisponibles] = useState(true);
   const [loading, setLoading] = useState(true);
   const [vista, setVista] = useState("proyectos"); // usuarios | accesos | areas | paises | responsables | proyectos
   const [view, setView] = useState("tarjetas");
@@ -967,7 +1127,7 @@ function App() {
       console.error(e);
       alert("No se pudieron cargar los datos: " + (e.message || e));
     }
-    await Promise.all([cargarTareas(), cargarPermisos(), cargarAreas(), cargarResponsables()]);
+    await Promise.all([cargarTareas(), cargarPermisos(), cargarAreas(), cargarResponsables(), cargarUsuarioPaises()]);
     setLoading(false);
   };
 
@@ -1028,6 +1188,19 @@ function App() {
       setPaises(data || []);
     } catch (e) {
       console.error(e);
+    }
+  };
+
+  const cargarUsuarioPaises = async () => {
+    try {
+      const { data, error } = await supabase.from("proyecto_usuario_paises").select("*");
+      if (error) throw error;
+      setUsuarioPaises(data || []);
+      setUsuarioPaisesDisponibles(true);
+    } catch (e) {
+      // Tabla todavía no creada en Supabase: el país por usuario no se muestra ni se puede asignar.
+      console.warn("proyecto_usuario_paises no disponible:", e.message || e);
+      setUsuarioPaisesDisponibles(false);
     }
   };
 
@@ -1203,7 +1376,7 @@ function App() {
         <Sidebar vista={vista} setVista={setVista} miRol={miRol} />
         <div style={{flex:1,minWidth:0,padding:"1.25rem"}}>
         <div style={{maxWidth:1400,margin:"0 auto"}}>
-        {vista === "usuarios" && <UsuariosView />}
+        {vista === "usuarios" && <UsuariosView paises={paises} usuarioPaises={usuarioPaises} usuarioPaisesDisponibles={usuarioPaisesDisponibles} onChanged={() => { cargarUsuarioPaises(); }} />}
         {vista === "accesos" && <AccesosView session={session} onChanged={cargarPermisos} />}
         {vista === "areas" && <CatalogoView titulo="Áreas" descripcion="Lista de áreas para asignar a un proyecto" icono="ti-building" tabla="proyecto_areas" onChanged={cargarAreas} />}
         {vista === "paises" && <CatalogoView titulo="Países" descripcion="Países para asignar a un proyecto" icono="ti-world" tabla="paises" onChanged={cargarPaises} />}
