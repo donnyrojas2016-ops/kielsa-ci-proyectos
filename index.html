@@ -621,13 +621,19 @@ function ConfirmDelete({ nombre, onConfirm, onClose, deleting }) {
 }
 
 /* ---------- Usuarios (administrar: crear, editar, inactivar, país) ---------- */
-function UsuarioFormModal({ paises, editUser, editPaisId, onClose, onSaved }) {
+function UsuarioFormModal({ paises, editUser, editPaisIds, onClose, onSaved }) {
   const [usuario, setUsuario] = useState(editUser ? editUser.usuario || "" : "");
   const [password, setPassword] = useState("");
   const [nombre, setNombre] = useState(editUser ? editUser.nombre || "" : "");
   const [estado, setEstado] = useState(editUser ? editUser.estado || "Activo" : "Activo");
-  const [paisId, setPaisId] = useState(editPaisId || "");
+  const [paisIds, setPaisIds] = useState(editPaisIds || []);
   const [saving, setSaving] = useState(false);
+
+  const togglePais = id => {
+    setPaisIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  };
+  const seleccionarTodos = () => setPaisIds(paises.map(p => p.id));
+  const seleccionarNinguno = () => setPaisIds([]);
 
   const guardar = async () => {
     if (!usuario.trim() || !nombre.trim()) { alert("Usuario y nombre son requeridos."); return; }
@@ -657,15 +663,10 @@ function UsuarioFormModal({ paises, editUser, editPaisId, onClose, onSaved }) {
 
       if (usuarioId) {
         try {
-          if (paisId) {
-            const { data: fila } = await supabase.from("proyecto_usuario_paises").select("id").eq("usuarioId", usuarioId);
-            if (fila && fila.length > 0) {
-              await supabase.from("proyecto_usuario_paises").update({ pais_id: paisId }).eq("usuarioId", usuarioId);
-            } else {
-              await supabase.from("proyecto_usuario_paises").insert([{ usuarioId, pais_id: paisId }]);
-            }
-          } else if (editPaisId) {
-            await supabase.from("proyecto_usuario_paises").delete().eq("usuarioId", usuarioId);
+          // Reemplaza por completo la lista de países asignados: borra lo anterior y vuelve a insertar lo seleccionado.
+          await supabase.from("proyecto_usuario_paises").delete().eq("usuarioId", usuarioId);
+          if (paisIds.length > 0) {
+            await supabase.from("proyecto_usuario_paises").insert(paisIds.map(pid => ({ usuarioId, pais_id: pid })));
           }
         } catch (e) {
           console.warn("proyecto_usuario_paises no disponible:", e.message || e);
@@ -683,7 +684,7 @@ function UsuarioFormModal({ paises, editUser, editPaisId, onClose, onSaved }) {
 
   return (
     <div style={{position:"fixed",inset:0,background:"rgba(15,23,42,.6)",zIndex:600,display:"flex",alignItems:"center",justifyContent:"center"}} onClick={e => e.target === e.currentTarget && onClose()}>
-      <div style={{background:y.surface,borderRadius:12,padding:"1.5rem",width:420,maxWidth:"92vw",boxShadow:"0 20px 50px rgba(0,0,0,.3)"}}>
+      <div style={{background:y.surface,borderRadius:12,padding:"1.5rem",width:460,maxWidth:"92vw",maxHeight:"88vh",overflowY:"auto",boxShadow:"0 20px 50px rgba(0,0,0,.3)"}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
           <strong style={{fontSize:15,color:y.text}}>{editUser ? "Editar usuario" : "Agregar usuario"}</strong>
           <button onClick={onClose} style={{background:"none",border:"none",color:y.text3,cursor:"pointer",fontSize:18,lineHeight:1}}>✕</button>
@@ -701,20 +702,29 @@ function UsuarioFormModal({ paises, editUser, editPaisId, onClose, onSaved }) {
             <label style={{fontSize:11,fontWeight:700,color:y.text3,textTransform:"uppercase"}}>Nombre completo *</label>
             <input value={nombre} onChange={e => setNombre(e.target.value)} style={{...inputStyle, marginTop:4}} placeholder="Nombre Apellido" />
           </div>
-          <div style={{display:"flex",gap:10}}>
-            <div style={{flex:1}}>
-              <label style={{fontSize:11,fontWeight:700,color:y.text3,textTransform:"uppercase"}}>País</label>
-              <select value={paisId} onChange={e => setPaisId(e.target.value ? parseInt(e.target.value) : "")} style={{...inputStyle, marginTop:4}}>
-                <option value="">—</option>
-                {paises.map(p => <option key={p.id} value={p.id}>{bandera(p.nombre)} {p.nombre}</option>)}
-              </select>
+          <div>
+            <label style={{fontSize:11,fontWeight:700,color:y.text3,textTransform:"uppercase"}}>Estado</label>
+            <select value={estado} onChange={e => setEstado(e.target.value)} style={{...inputStyle, marginTop:4}}>
+              <option>Activo</option>
+              <option>Inactivo</option>
+            </select>
+          </div>
+          <div>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
+              <label style={{fontSize:11,fontWeight:700,color:y.text3,textTransform:"uppercase"}}>Países ({paisIds.length === paises.length && paises.length > 0 ? "todos" : paisIds.length})</label>
+              <div style={{display:"flex",gap:10}}>
+                <button type="button" onClick={seleccionarTodos} style={{background:"none",border:"none",color:y.primary,fontSize:11,fontWeight:600,cursor:"pointer",padding:0}}>Todos</button>
+                <button type="button" onClick={seleccionarNinguno} style={{background:"none",border:"none",color:y.text3,fontSize:11,fontWeight:600,cursor:"pointer",padding:0}}>Ninguno</button>
+              </div>
             </div>
-            <div style={{flex:1}}>
-              <label style={{fontSize:11,fontWeight:700,color:y.text3,textTransform:"uppercase"}}>Estado</label>
-              <select value={estado} onChange={e => setEstado(e.target.value)} style={{...inputStyle, marginTop:4}}>
-                <option>Activo</option>
-                <option>Inactivo</option>
-              </select>
+            <div style={{display:"flex",flexWrap:"wrap",gap:8,padding:"0.6rem",background:y.grayBg,borderRadius:8,border:"1px solid "+y.border}}>
+              {paises.length === 0 && <span style={{fontSize:12,color:y.text3}}>No hay países en el catálogo.</span>}
+              {paises.map(p => (
+                <label key={p.id} style={{display:"flex",alignItems:"center",gap:5,fontSize:12,cursor:"pointer",padding:"4px 9px",borderRadius:7,background: paisIds.includes(p.id) ? y.primaryLight : y.surface, border:"1px solid "+(paisIds.includes(p.id) ? y.primary : y.border), fontWeight: paisIds.includes(p.id) ? 600 : 400, color: paisIds.includes(p.id) ? y.primary : y.text2}}>
+                  <input type="checkbox" checked={paisIds.includes(p.id)} onChange={() => togglePais(p.id)} />
+                  {bandera(p.nombre)} {p.nombre}
+                </label>
+              ))}
             </div>
           </div>
         </div>
@@ -747,11 +757,9 @@ function UsuariosView({ paises, usuarioPaises, usuarioPaisesDisponibles, onChang
 
   useEffect(() => { cargar(); }, []);
 
-  const paisDe = usuarioId => {
-    const fila = (usuarioPaises || []).find(x => x.usuarioId === usuarioId);
-    if (!fila || !fila.pais_id) return null;
-    const p = (paises || []).find(x => x.id === fila.pais_id);
-    return p || null;
+  const paisesDe = usuarioId => {
+    const filas = (usuarioPaises || []).filter(x => x.usuarioId === usuarioId);
+    return filas.map(f => (paises || []).find(p => p.id === f.pais_id)).filter(Boolean);
   };
 
   const toggleEstado = async u => {
@@ -797,13 +805,17 @@ function UsuariosView({ paises, usuarioPaises, usuarioPaisesDisponibles, onChang
               <tr><td colSpan={5} style={{padding:"1.5rem",textAlign:"center",color:y.text3,fontSize:12}}>Sin usuarios</td></tr>
             )}
             {usuarios.map(u => {
-              const pais = paisDe(u.id);
+              const paisesU = paisesDe(u.id);
+              const todosPaises = (paises || []).length > 0 && paisesU.length === (paises || []).length;
               return (
                 <tr key={u.id} style={{borderTop:"1px solid "+y.border}}>
                   <td style={{padding:"0.55rem 0.75rem",fontSize:12.5,fontWeight:700,color:y.text}}>{u.nombre || "—"}</td>
                   <td style={{padding:"0.55rem 0.75rem",fontSize:12.5,color:y.text2}}>{u.usuario}</td>
-                  <td style={{padding:"0.55rem 0.75rem",fontSize:12.5,color:y.text2}}>
-                    {usuarioPaisesDisponibles ? (pais ? (bandera(pais.nombre) + " " + pais.nombre) : "—") : "—"}
+                  <td style={{padding:"0.55rem 0.75rem",fontSize:12.5,color:y.text2,maxWidth:220}}>
+                    {!usuarioPaisesDisponibles ? "—" :
+                      todosPaises ? <span style={{fontWeight:600,color:y.primary}}>Todos los países</span> :
+                      paisesU.length === 0 ? "—" :
+                      paisesU.map(p => bandera(p.nombre)).join(" ") + " " + paisesU.map(p => p.nombre).join(", ")}
                   </td>
                   <td style={{padding:"0.55rem 0.75rem"}}>
                     <span style={{display:"inline-flex",alignItems:"center",padding:"3px 10px",borderRadius:20,fontSize:11,fontWeight:700,background: u.estado==="Activo" ? y.successBg : y.grayBg, color: u.estado==="Activo" ? y.success : y.gray}}>{u.estado || "—"}</span>
@@ -824,7 +836,7 @@ function UsuariosView({ paises, usuarioPaises, usuarioPaisesDisponibles, onChang
         <UsuarioFormModal
           paises={paises || []}
           editUser={formAbierto && formAbierto.id ? formAbierto : null}
-          editPaisId={formAbierto && formAbierto.id ? (paisDe(formAbierto.id) ? paisDe(formAbierto.id).id : "") : ""}
+          editPaisIds={formAbierto && formAbierto.id ? paisesDe(formAbierto.id).map(p => p.id) : []}
           onClose={() => setFormAbierto(null)}
           onSaved={() => { cargar(); onChanged && onChanged(); }}
         />

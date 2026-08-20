@@ -113,7 +113,7 @@ En **Usuarios** ahora puedes:
 - **Agregar usuario** — crea una cuenta nueva (usuario, contraseña, nombre, país y estado) sin tener que pedírselo a nadie más.
 - **Editar** — cambia el usuario, el nombre, el país o el estado de una cuenta que ya existe. La contraseña se deja en blanco si no la quieres cambiar.
 - **Inactivar / Activar** — desactiva el acceso de alguien con un clic (por ejemplo si alguien deja la empresa), sin necesidad de borrar su cuenta ni su historial. Se puede reactivar en cualquier momento.
-- **País** — cada usuario puede tener un país asignado (solo informativo por ahora, para saber de dónde es cada quien).
+- **Países** — a cada usuario le puedes marcar uno, varios o todos los países (con un clic en "Todos"), usando casillas de selección. Es solo informativo por ahora, para saber con qué países trabaja cada quien.
 
 Esto usa la misma tabla `usuarios` de siempre (la que comparten con el resto de Kielsa CI) para el usuario/contraseña/nombre/estado, así que cualquier cambio aquí también aplica si esa persona usa la app principal. El país es una excepción: se guarda en una tabla aparte (`proyecto_usuario_paises`) que solo usa esta página, para no tocar la tabla compartida. Necesita esa tabla en Supabase (ver instrucciones abajo); si no existe, la columna País simplemente no se muestra y el resto sigue funcionando normal.
 
