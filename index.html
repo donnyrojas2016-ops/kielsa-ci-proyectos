@@ -6,6 +6,8 @@
 <title>Kielsa CI — Proyectos</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
 <script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin></script>
 <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin></script>
 <script src="https://unpkg.com/@babel/standalone@7.29.8/babel.min.js" crossorigin></script>
@@ -194,7 +196,7 @@ const nuevoProyecto = () => ({
   responsable:"", ticket:"", fecha_inicio:"", fecha_fin:"", avance:0, estado:"Pendiente", observacion:""
 });
 
-function ProjectModal({ paises, session, editProject, onClose, onSaved, onTareasChanged }) {
+function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, responsables, responsablesDisponibles, editProject, onClose, onSaved, onTareasChanged }) {
   const [drafts, setDrafts] = useState(() => editProject ? [{ ...editProject }] : [nuevoProyecto()]);
   const [active, setActive] = useState(0);
   const [saving, setSaving] = useState(false);
@@ -442,7 +444,7 @@ function ProjectModal({ paises, session, editProject, onClose, onSaved, onTareas
                 <label style={{...labelStyle,color:y.primary}}>Área</label>
                 <select value={current.area} onChange={e => updateField(active,"area",e.target.value)} style={{...inputStyle,fontSize:12}}>
                   <option value="">—</option>
-                  {AREAS.map(a => <option key={a}>{a}</option>)}
+                  {(areasDisponibles && areasCatalogo && areasCatalogo.length > 0 ? areasCatalogo.map(a => a.nombre) : AREAS).map(a => <option key={a}>{a}</option>)}
                 </select>
               </div>
               <div>
@@ -456,7 +458,17 @@ function ProjectModal({ paises, session, editProject, onClose, onSaved, onTareas
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
               <div>
                 <label style={{...labelStyle,color:y.primary}}>Responsable</label>
-                <input value={current.responsable} onChange={e => updateField(active,"responsable",e.target.value)} style={{...inputStyle,fontSize:12}} />
+                {responsablesDisponibles && responsables && responsables.length > 0 ? (
+                  <select value={current.responsable || ""} onChange={e => updateField(active,"responsable",e.target.value)} style={{...inputStyle,fontSize:12}}>
+                    <option value="">—</option>
+                    {current.responsable && !responsables.some(r => r.nombre === current.responsable) && (
+                      <option value={current.responsable}>{current.responsable}</option>
+                    )}
+                    {responsables.map(r => <option key={r.id} value={r.nombre}>{r.nombre}</option>)}
+                  </select>
+                ) : (
+                  <input value={current.responsable} onChange={e => updateField(active,"responsable",e.target.value)} style={{...inputStyle,fontSize:12}} />
+                )}
               </div>
               <div>
                 <label style={{...labelStyle,color:y.primary}}>Estado</label>
@@ -609,7 +621,62 @@ function ConfirmDelete({ nombre, onConfirm, onClose, deleting }) {
 }
 
 /* ---------- Usuarios y permisos ---------- */
-function UsersModal({ session, onClose, onChanged }) {
+/* ---------- Usuarios (solo lectura) ---------- */
+function UsuariosView() {
+  const [usuarios, setUsuarios] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      try {
+        const { data, error } = await supabase.from("usuarios").select("*").order("nombre");
+        if (error) throw error;
+        setUsuarios(data || []);
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  return (
+    <Card mb={0}>
+      <CardHeader icon="ti-users" left={"Usuarios (" + usuarios.length + ")"} right={<span style={{fontSize:11,color:y.text3}}>Cuentas que pueden entrar a esta página (misma base que Kielsa CI)</span>} />
+      {loading ? (
+        <div style={{padding:"2rem",textAlign:"center",fontSize:12,color:y.text3}}>Cargando...</div>
+      ) : (
+        <table style={{width:"100%",borderCollapse:"collapse"}}>
+          <thead>
+            <tr style={{background:y.grayBg}}>
+              <th style={{padding:"0.5rem 0.75rem",textAlign:"left",fontSize:10,fontWeight:700,color:y.text3,textTransform:"uppercase"}}>Nombre</th>
+              <th style={{padding:"0.5rem 0.75rem",textAlign:"left",fontSize:10,fontWeight:700,color:y.text3,textTransform:"uppercase"}}>Usuario</th>
+              <th style={{padding:"0.5rem 0.75rem",textAlign:"left",fontSize:10,fontWeight:700,color:y.text3,textTransform:"uppercase"}}>Estado</th>
+            </tr>
+          </thead>
+          <tbody>
+            {usuarios.length === 0 && (
+              <tr><td colSpan={3} style={{padding:"1.5rem",textAlign:"center",color:y.text3,fontSize:12}}>Sin usuarios</td></tr>
+            )}
+            {usuarios.map(u => (
+              <tr key={u.id} style={{borderTop:"1px solid "+y.border}}>
+                <td style={{padding:"0.55rem 0.75rem",fontSize:12.5,fontWeight:700,color:y.text}}>{u.nombre || "—"}</td>
+                <td style={{padding:"0.55rem 0.75rem",fontSize:12.5,color:y.text2}}>{u.usuario}</td>
+                <td style={{padding:"0.55rem 0.75rem"}}>
+                  <span style={{display:"inline-flex",alignItems:"center",padding:"3px 10px",borderRadius:20,fontSize:11,fontWeight:700,background: u.estado==="Activo" ? y.successBg : y.grayBg, color: u.estado==="Activo" ? y.success : y.gray}}>{u.estado || "—"}</span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </Card>
+  );
+}
+
+/* ---------- Accesos (asignar rol por usuario) ---------- */
+function AccesosView({ session, onChanged }) {
   const [usuarios, setUsuarios] = useState([]);
   const [permisos, setPermisos] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -621,7 +688,7 @@ function UsersModal({ session, onClose, onChanged }) {
       setLoading(true);
       try {
         const [{ data: us, error: e1 }, { data: pe, error: e2 }] = await Promise.all([
-          supabase.from("usuarios").select("*").order("id"),
+          supabase.from("usuarios").select("*").order("nombre"),
           supabase.from("proyecto_permisos").select("*")
         ]);
         if (e1) throw e1;
@@ -665,71 +732,198 @@ function UsersModal({ session, onClose, onChanged }) {
   };
 
   return (
-    <div style={{position:"fixed",inset:0,background:"rgba(15,23,42,.6)",zIndex:700,display:"flex",alignItems:"center",justifyContent:"center",padding:20}} onClick={e => e.target === e.currentTarget && onClose()}>
-      <div style={{background:y.surface,borderRadius:14,width:"100%",maxWidth:720,maxHeight:"85vh",display:"flex",flexDirection:"column",boxShadow:"0 20px 50px rgba(0,0,0,.3)",overflow:"hidden"}}>
-        <div style={{background:"linear-gradient(135deg,#0f172a,#1e4db7)",padding:"0.9rem 1.25rem",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
-          <div style={{display:"flex",alignItems:"center",gap:10}}>
-            <i className="ti ti-users-group" style={{fontSize:18,color:"#fff"}}/>
-            <strong style={{fontSize:15,color:"#fff"}}>Usuarios y permisos</strong>
-          </div>
-          <button onClick={onClose} style={{background:"rgba(255,255,255,.15)",border:"none",borderRadius:6,color:"#fff",padding:"4px 10px",cursor:"pointer",fontSize:13}}>✕</button>
+    <React.Fragment>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:16}}>
+        <div style={{background:y.primaryLight,border:"1px solid #c7d2fe",borderRadius:10,padding:"0.8rem 0.9rem"}}>
+          <div style={{fontSize:12,fontWeight:800,color:y.primary,marginBottom:4}}>Administrador</div>
+          <div style={{fontSize:11,color:y.text2,lineHeight:1.5}}>Acceso total: crear, editar, eliminar proyectos y gestionar usuarios.</div>
         </div>
-
-        <div style={{padding:"1rem 1.25rem",overflowY:"auto"}}>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:16}}>
-            <div style={{background:y.primaryLight,border:"1px solid #c7d2fe",borderRadius:10,padding:"0.8rem 0.9rem"}}>
-              <div style={{fontSize:12,fontWeight:800,color:y.primary,marginBottom:4}}>Administrador</div>
-              <div style={{fontSize:11,color:y.text2,lineHeight:1.5}}>Acceso total: crear, editar, eliminar proyectos y gestionar usuarios.</div>
-            </div>
-            <div style={{background:y.warningBg,border:"1px solid #fde68a",borderRadius:10,padding:"0.8rem 0.9rem"}}>
-              <div style={{fontSize:12,fontWeight:800,color:y.warning,marginBottom:4}}>Editor</div>
-              <div style={{fontSize:11,color:y.text2,lineHeight:1.5}}>Crea y edita proyectos, mueve el Kanban y comenta. No puede eliminar ni gestionar usuarios.</div>
-            </div>
-            <div style={{background:y.grayBg,border:"1px solid "+y.border,borderRadius:10,padding:"0.8rem 0.9rem"}}>
-              <div style={{fontSize:12,fontWeight:800,color:y.gray,marginBottom:4}}>Solo lectura</div>
-              <div style={{fontSize:11,color:y.text2,lineHeight:1.5}}>Ve proyectos, filtra y exporta a Excel. No puede crear, editar ni comentar.</div>
-            </div>
-          </div>
-
-          {!disponible ? (
-            <div style={{fontSize:12,color:y.text3,padding:"1rem",textAlign:"center"}}>Esta función todavía no está activada en la base de datos (falta crear la tabla "proyecto_permisos"). Mientras tanto, todos los usuarios activos tienen acceso completo (Administrador).</div>
-          ) : loading ? (
-            <div style={{fontSize:12,color:y.text3,padding:"1rem",textAlign:"center"}}>Cargando usuarios...</div>
-          ) : (
-            <div style={{border:"1px solid "+y.border,borderRadius:10,overflow:"hidden"}}>
-              <table style={{width:"100%",borderCollapse:"collapse"}}>
-                <thead>
-                  <tr style={{background:y.grayBg}}>
-                    <th style={{padding:"0.5rem 0.75rem",textAlign:"left",fontSize:10,fontWeight:700,color:y.text3,textTransform:"uppercase"}}>Usuario</th>
-                    <th style={{padding:"0.5rem 0.75rem",textAlign:"left",fontSize:10,fontWeight:700,color:y.text3,textTransform:"uppercase"}}>Estado</th>
-                    <th style={{padding:"0.5rem 0.75rem",textAlign:"left",fontSize:10,fontWeight:700,color:y.text3,textTransform:"uppercase"}}>Rol en Proyectos</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {usuarios.map(u => (
-                    <tr key={u.id} style={{borderTop:"1px solid "+y.border}}>
-                      <td style={{padding:"0.55rem 0.75rem",fontSize:12.5}}>
-                        <div style={{fontWeight:700,color:y.text}}>{u.nombre || u.usuario}{u.id === session.id && <span style={{fontWeight:400,color:y.text3}}> (tú)</span>}</div>
-                        <div style={{fontSize:10.5,color:y.text3}}>{u.usuario}</div>
-                      </td>
-                      <td style={{padding:"0.55rem 0.75rem"}}>
-                        <span style={{display:"inline-flex",alignItems:"center",padding:"3px 10px",borderRadius:20,fontSize:11,fontWeight:700,background: u.estado==="Activo" ? y.successBg : y.grayBg, color: u.estado==="Activo" ? y.success : y.gray}}>{u.estado || "—"}</span>
-                      </td>
-                      <td style={{padding:"0.55rem 0.75rem"}}>
-                        <select value={rolDe(u.id)} disabled={guardandoId === u.id} onChange={e => cambiarRol(u.id, e.target.value)} style={{...inputStyle,fontSize:12,width:"auto",padding:"0.3rem 0.5rem"}}>
-                          <option value="admin">Administrador</option>
-                          <option value="editor">Editor</option>
-                          <option value="lector">Solo lectura</option>
-                        </select>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+        <div style={{background:y.warningBg,border:"1px solid #fde68a",borderRadius:10,padding:"0.8rem 0.9rem"}}>
+          <div style={{fontSize:12,fontWeight:800,color:y.warning,marginBottom:4}}>Editor</div>
+          <div style={{fontSize:11,color:y.text2,lineHeight:1.5}}>Crea y edita proyectos, mueve el Kanban y comenta. No puede eliminar ni gestionar usuarios.</div>
+        </div>
+        <div style={{background:y.grayBg,border:"1px solid "+y.border,borderRadius:10,padding:"0.8rem 0.9rem"}}>
+          <div style={{fontSize:12,fontWeight:800,color:y.gray,marginBottom:4}}>Solo lectura</div>
+          <div style={{fontSize:11,color:y.text2,lineHeight:1.5}}>Ve proyectos, filtra y exporta a Excel/PDF. No puede crear, editar ni comentar.</div>
         </div>
       </div>
+
+      <Card mb={0}>
+        <CardHeader icon="ti-shield-lock" left={"Accesos (" + usuarios.length + ")"} right={<span style={{fontSize:11,color:y.text3}}>Rol de cada usuario en esta página</span>} />
+        {!disponible ? (
+          <div style={{fontSize:12,color:y.text3,padding:"1.5rem",textAlign:"center"}}>Esta función todavía no está activada en la base de datos (falta crear la tabla "proyecto_permisos"). Mientras tanto, todos los usuarios activos tienen acceso completo (Administrador).</div>
+        ) : loading ? (
+          <div style={{fontSize:12,color:y.text3,padding:"1.5rem",textAlign:"center"}}>Cargando usuarios...</div>
+        ) : (
+          <table style={{width:"100%",borderCollapse:"collapse"}}>
+            <thead>
+              <tr style={{background:y.grayBg}}>
+                <th style={{padding:"0.5rem 0.75rem",textAlign:"left",fontSize:10,fontWeight:700,color:y.text3,textTransform:"uppercase"}}>Usuario</th>
+                <th style={{padding:"0.5rem 0.75rem",textAlign:"left",fontSize:10,fontWeight:700,color:y.text3,textTransform:"uppercase"}}>Estado</th>
+                <th style={{padding:"0.5rem 0.75rem",textAlign:"left",fontSize:10,fontWeight:700,color:y.text3,textTransform:"uppercase"}}>Rol en Proyectos</th>
+              </tr>
+            </thead>
+            <tbody>
+              {usuarios.map(u => (
+                <tr key={u.id} style={{borderTop:"1px solid "+y.border}}>
+                  <td style={{padding:"0.55rem 0.75rem",fontSize:12.5}}>
+                    <div style={{fontWeight:700,color:y.text}}>{u.nombre || u.usuario}{u.id === session.id && <span style={{fontWeight:400,color:y.text3}}> (tú)</span>}</div>
+                    <div style={{fontSize:10.5,color:y.text3}}>{u.usuario}</div>
+                  </td>
+                  <td style={{padding:"0.55rem 0.75rem"}}>
+                    <span style={{display:"inline-flex",alignItems:"center",padding:"3px 10px",borderRadius:20,fontSize:11,fontWeight:700,background: u.estado==="Activo" ? y.successBg : y.grayBg, color: u.estado==="Activo" ? y.success : y.gray}}>{u.estado || "—"}</span>
+                  </td>
+                  <td style={{padding:"0.55rem 0.75rem"}}>
+                    <select value={rolDe(u.id)} disabled={guardandoId === u.id} onChange={e => cambiarRol(u.id, e.target.value)} style={{...inputStyle,fontSize:12,width:"auto",padding:"0.3rem 0.5rem"}}>
+                      <option value="admin">Administrador</option>
+                      <option value="editor">Editor</option>
+                      <option value="lector">Solo lectura</option>
+                    </select>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </Card>
+    </React.Fragment>
+  );
+}
+
+/* ---------- Catálogo genérico (Áreas / Países / Responsables) ---------- */
+function CatalogoView({ titulo, descripcion, icono, tabla, onChanged }) {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [disponible, setDisponible] = useState(true);
+  const [nuevo, setNuevo] = useState("");
+  const [guardando, setGuardando] = useState(false);
+  const [editandoId, setEditandoId] = useState(null);
+  const [editandoTexto, setEditandoTexto] = useState("");
+
+  const cargar = async () => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.from(tabla).select("*").order("nombre");
+      if (error) throw error;
+      setItems(data || []);
+      setDisponible(true);
+    } catch (e) {
+      console.warn(tabla + " no disponible:", e.message || e);
+      setDisponible(false);
+    } finally {
+      setLoading(false);
+    }
+  };
+  useEffect(() => { cargar(); }, [tabla]);
+
+  const agregar = async () => {
+    const nombre = nuevo.trim();
+    if (!nombre) return;
+    setGuardando(true);
+    try {
+      const { data, error } = await supabase.from(tabla).insert({ nombre }).select();
+      if (error) throw error;
+      setItems(list => [...list, ...(data || [])].sort((a, b) => (a.nombre || "").localeCompare(b.nombre || "")));
+      setNuevo("");
+      onChanged && onChanged();
+    } catch (e) {
+      alert("No se pudo agregar: " + (e.message || e));
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  const guardarEdicion = async (item) => {
+    const nombre = editandoTexto.trim();
+    if (!nombre) return;
+    try {
+      const { error } = await supabase.from(tabla).update({ nombre }).eq("id", item.id);
+      if (error) throw error;
+      setItems(list => list.map(i => i.id === item.id ? { ...i, nombre } : i));
+      setEditandoId(null);
+      onChanged && onChanged();
+    } catch (e) {
+      alert("No se pudo guardar: " + (e.message || e));
+    }
+  };
+
+  const eliminar = async (item) => {
+    if (!window.confirm('¿Eliminar "' + item.nombre + '"? Los proyectos que ya lo tengan asignado conservan el valor actual.')) return;
+    setItems(list => list.filter(i => i.id !== item.id));
+    try {
+      const { error } = await supabase.from(tabla).delete().eq("id", item.id);
+      if (error) throw error;
+      onChanged && onChanged();
+    } catch (e) {
+      alert("No se pudo eliminar: " + (e.message || e));
+      cargar();
+    }
+  };
+
+  return (
+    <Card mb={0}>
+      <CardHeader icon={icono} left={titulo + " (" + items.length + ")"} right={<span style={{fontSize:11,color:y.text3}}>{descripcion}</span>} />
+      <div style={{padding:"1rem 1.1rem"}}>
+        {!disponible ? (
+          <div style={{fontSize:12,color:y.text3}}>Esta función todavía no está activada en la base de datos (falta crear la tabla "{tabla}"). Mientras tanto, el formulario de proyectos sigue funcionando con la lista anterior.</div>
+        ) : loading ? (
+          <div style={{fontSize:12,color:y.text3}}>Cargando...</div>
+        ) : (
+          <React.Fragment>
+            <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:14}}>
+              {items.length === 0 && <div style={{fontSize:12,color:y.text3}}>Sin registros todavía — agrega el primero abajo.</div>}
+              {items.map(item => (
+                <div key={item.id} style={{display:"flex",alignItems:"center",gap:8,background:y.grayBg,border:"1px solid "+y.border,borderRadius:8,padding:"6px 10px"}}>
+                  {editandoId === item.id ? (
+                    <React.Fragment>
+                      <input value={editandoTexto} onChange={e => setEditandoTexto(e.target.value)} onKeyDown={e => { if (e.key === "Enter") guardarEdicion(item); if (e.key === "Escape") setEditandoId(null); }} style={{...inputStyle,fontSize:12,flex:1}} autoFocus />
+                      <Btn sm primary onClick={() => guardarEdicion(item)}><i className="ti ti-check"/></Btn>
+                      <Btn sm onClick={() => setEditandoId(null)}><i className="ti ti-x"/></Btn>
+                    </React.Fragment>
+                  ) : (
+                    <React.Fragment>
+                      <span style={{flex:1,fontSize:13,color:y.text}}>{item.nombre}</span>
+                      <button onClick={() => { setEditandoId(item.id); setEditandoTexto(item.nombre); }} style={{background:"none",border:"none",color:y.text3,cursor:"pointer",fontSize:14,padding:4}}><i className="ti ti-pencil"/></button>
+                      <button onClick={() => eliminar(item)} style={{background:"none",border:"none",color:y.text3,cursor:"pointer",fontSize:15,lineHeight:1,padding:4}}>×</button>
+                    </React.Fragment>
+                  )}
+                </div>
+              ))}
+            </div>
+            <div style={{display:"flex",gap:6}}>
+              <input value={nuevo} onChange={e => setNuevo(e.target.value)} onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); agregar(); } }} placeholder="Nuevo..." style={{...inputStyle,fontSize:13}} />
+              <Btn primary sm disabled={guardando || !nuevo.trim()} onClick={agregar}><i className="ti ti-plus"/> Agregar</Btn>
+            </div>
+          </React.Fragment>
+        )}
+      </div>
+    </Card>
+  );
+}
+
+/* ---------- Menú lateral ---------- */
+function Sidebar({ vista, setVista, miRol }) {
+  const items = [
+    { key:"usuarios", label:"Usuarios", icon:"ti-users", adminOnly:true },
+    { key:"accesos", label:"Accesos", icon:"ti-shield-lock", adminOnly:true },
+    { key:"areas", label:"Áreas", icon:"ti-building", adminOnly:true },
+    { key:"paises", label:"Países", icon:"ti-world", adminOnly:true },
+    { key:"responsables", label:"Responsables", icon:"ti-user-check", adminOnly:true },
+    { key:"proyectos", label:"Proyectos", icon:"ti-briefcase", adminOnly:false }
+  ];
+  return (
+    <div style={{width:190,flexShrink:0,background:y.surface,borderRight:"1px solid "+y.border,padding:"1rem 0.6rem",alignSelf:"flex-start",position:"sticky",top:0}}>
+      {items.filter(it => !it.adminOnly || miRol === "admin").map(it => (
+        <div key={it.key} onClick={() => setVista(it.key)} style={{
+          display:"flex",alignItems:"center",gap:10,padding:"0.6rem 0.75rem",borderRadius:8,cursor:"pointer",marginBottom:4,
+          background: vista === it.key ? y.primaryLight : "transparent",
+          color: vista === it.key ? y.primary : y.text2,
+          fontWeight: vista === it.key ? 700 : 500, fontSize:13
+        }}>
+          <i className={"ti "+it.icon} style={{fontSize:16}}/>
+          {it.label}
+        </div>
+      ))}
     </div>
   );
 }
@@ -743,14 +937,18 @@ function App() {
   const [paises, setPaises] = useState([]);
   const [tareas, setTareas] = useState([]);
   const [permisos, setPermisos] = useState([]);
+  const [areas, setAreas] = useState([]);
+  const [areasDisponibles, setAreasDisponibles] = useState(true);
+  const [responsables, setResponsables] = useState([]);
+  const [responsablesDisponibles, setResponsablesDisponibles] = useState(true);
   const [loading, setLoading] = useState(true);
+  const [vista, setVista] = useState("proyectos"); // usuarios | accesos | areas | paises | responsables | proyectos
   const [view, setView] = useState("tarjetas");
   const [filtroCategoria, setFiltroCategoria] = useState("");
   const [filtroEstado, setFiltroEstado] = useState("");
   const [filtroPais, setFiltroPais] = useState("");
   const [alertasAbiertas, setAlertasAbiertas] = useState(true);
   const [modal, setModal] = useState(null); // {mode:"add"|"edit", project}
-  const [modalUsuarios, setModalUsuarios] = useState(false);
   const [toDelete, setToDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
 
@@ -769,7 +967,7 @@ function App() {
       console.error(e);
       alert("No se pudieron cargar los datos: " + (e.message || e));
     }
-    await Promise.all([cargarTareas(), cargarPermisos()]);
+    await Promise.all([cargarTareas(), cargarPermisos(), cargarAreas(), cargarResponsables()]);
     setLoading(false);
   };
 
@@ -794,6 +992,42 @@ function App() {
       // Tabla todavía no creada en Supabase: mientras tanto, todos los usuarios son Administrador.
       console.warn("proyecto_permisos no disponible:", e.message || e);
       setPermisos([]);
+    }
+  };
+
+  const cargarAreas = async () => {
+    try {
+      const { data, error } = await supabase.from("proyecto_areas").select("*").order("nombre");
+      if (error) throw error;
+      setAreas(data || []);
+      setAreasDisponibles(true);
+    } catch (e) {
+      // Tabla todavía no creada en Supabase: el formulario sigue usando la lista fija de siempre.
+      console.warn("proyecto_areas no disponible:", e.message || e);
+      setAreasDisponibles(false);
+    }
+  };
+
+  const cargarResponsables = async () => {
+    try {
+      const { data, error } = await supabase.from("proyecto_responsables").select("*").order("nombre");
+      if (error) throw error;
+      setResponsables(data || []);
+      setResponsablesDisponibles(true);
+    } catch (e) {
+      // Tabla todavía no creada en Supabase: el formulario sigue usando texto libre.
+      console.warn("proyecto_responsables no disponible:", e.message || e);
+      setResponsablesDisponibles(false);
+    }
+  };
+
+  const cargarPaises = async () => {
+    try {
+      const { data, error } = await supabase.from("paises").select("*").order("id");
+      if (error) throw error;
+      setPaises(data || []);
+    } catch (e) {
+      console.error(e);
     }
   };
 
@@ -906,6 +1140,35 @@ function App() {
     XLSX.writeFile(wb, "Proyectos_KielsaCI_" + new Date().toISOString().split("T")[0] + ".xlsx");
   };
 
+  const exportarPDF = () => {
+    const doc = new window.jspdf.jsPDF({ orientation: "landscape" });
+    const filas = filtrados.map(p => [
+      p.codigo || "",
+      p.categoria || "",
+      p.nombre || "",
+      p.area || "",
+      nombrePais(p.pais_id),
+      p.responsable || "",
+      (p.fecha_inicio || "") + (p.fecha_fin ? " → " + p.fecha_fin : ""),
+      Math.round((parseFloat(p.avance) || 0) * 100) + "%",
+      p.estado || ""
+    ]);
+    doc.setFontSize(14);
+    doc.text("Proyectos — Kielsa CI", 14, 15);
+    doc.setFontSize(9);
+    doc.setTextColor(120);
+    doc.text("Generado el " + new Date().toLocaleDateString("es-HN") + " · " + filtrados.length + " proyecto(s)", 14, 21);
+    doc.autoTable({
+      head: [["Cód.", "Categoría", "Nombre", "Área", "País", "Responsable", "Fechas", "Avance", "Estado"]],
+      body: filas,
+      startY: 26,
+      styles: { fontSize: 8, cellPadding: 2 },
+      headStyles: { fillColor: [30, 77, 183] },
+      margin: { left: 14, right: 14 }
+    });
+    doc.save("Proyectos_KielsaCI_" + new Date().toISOString().split("T")[0] + ".pdf");
+  };
+
   if (!session) return <Login onLogin={login} />;
 
   return (
@@ -926,11 +1189,6 @@ function App() {
               <span style={{position:"absolute",top:-4,right:-4,background:y.danger,color:"#fff",fontSize:9,fontWeight:800,borderRadius:20,padding:"1px 5px",border:"2px solid #16234a",lineHeight:1.3}}>{alertas.length}</span>
             )}
           </div>
-          {miRol === "admin" && (
-            <div onClick={() => setModalUsuarios(true)} title="Usuarios y permisos" style={{width:34,height:34,borderRadius:8,background:"rgba(255,255,255,.12)",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>
-              <i className="ti ti-users-group" style={{fontSize:15,color:"#fff"}}/>
-            </div>
-          )}
           <div style={{fontSize:12,color:"rgba(255,255,255,.85)"}}>
             <i className="ti ti-user-circle"/> {session.nombre}
             {miRol !== "admin" && <span style={{marginLeft:6,fontSize:10,background:"rgba(255,255,255,.15)",padding:"2px 7px",borderRadius:10,textTransform:"uppercase",fontWeight:700}}>{miRol === "editor" ? "Editor" : "Solo lectura"}</span>}
@@ -941,8 +1199,17 @@ function App() {
         </div>
       </div>
 
-      <div style={{maxWidth:1400,margin:"0 auto",padding:"1.25rem"}}>
-        {loading ? (
+      <div style={{display:"flex",alignItems:"flex-start"}}>
+        <Sidebar vista={vista} setVista={setVista} miRol={miRol} />
+        <div style={{flex:1,minWidth:0,padding:"1.25rem"}}>
+        <div style={{maxWidth:1400,margin:"0 auto"}}>
+        {vista === "usuarios" && <UsuariosView />}
+        {vista === "accesos" && <AccesosView session={session} onChanged={cargarPermisos} />}
+        {vista === "areas" && <CatalogoView titulo="Áreas" descripcion="Lista de áreas para asignar a un proyecto" icono="ti-building" tabla="proyecto_areas" onChanged={cargarAreas} />}
+        {vista === "paises" && <CatalogoView titulo="Países" descripcion="Países para asignar a un proyecto" icono="ti-world" tabla="paises" onChanged={cargarPaises} />}
+        {vista === "responsables" && <CatalogoView titulo="Responsables" descripcion="Lista de responsables para asignar a un proyecto" icono="ti-user-check" tabla="proyecto_responsables" onChanged={cargarResponsables} />}
+        {vista === "proyectos" && (
+        loading ? (
           <div style={{textAlign:"center",padding:"4rem",color:y.text3}}>
             <i className="ti ti-loader-2" style={{fontSize:32}}/>
             <div style={{marginTop:8,fontSize:13}}>Cargando proyectos...</div>
@@ -1054,6 +1321,7 @@ function App() {
                       ))}
                     </div>
                     <Btn sm onClick={exportarExcel}><i className="ti ti-file-spreadsheet"/> Excel</Btn>
+                    <Btn sm onClick={exportarPDF}><i className="ti ti-file-type-pdf"/> PDF</Btn>
                     {puedeEditar && <Btn primary sm onClick={() => setModal({mode:"add"})}><i className="ti ti-plus"/> Agregar proyecto</Btn>}
                   </React.Fragment>
                 }
@@ -1222,13 +1490,20 @@ function App() {
               )}
             </Card>
           </React.Fragment>
+        )
         )}
+        </div>
+        </div>
       </div>
 
       {modal && (
         <ProjectModal
           paises={paises}
           session={session}
+          areasCatalogo={areas}
+          areasDisponibles={areasDisponibles}
+          responsables={responsables}
+          responsablesDisponibles={responsablesDisponibles}
           editProject={modal.mode === "edit" ? modal.project : null}
           onClose={() => setModal(null)}
           onSaved={() => { setModal(null); cargarDatos(); }}
@@ -1241,13 +1516,6 @@ function App() {
           deleting={deleting}
           onConfirm={eliminar}
           onClose={() => setToDelete(null)}
-        />
-      )}
-      {modalUsuarios && (
-        <UsersModal
-          session={session}
-          onClose={() => setModalUsuarios(false)}
-          onChanged={cargarPermisos}
         />
       )}
     </div>
