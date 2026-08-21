@@ -187,6 +187,23 @@ function avanceEfectivo(proyecto, tareasDelProyecto) {
   return parseFloat(proyecto.avance) || 0;
 }
 
+// Salud del presupuesto: compara lo gastado contra lo planeado. Devuelve null si el
+// proyecto todavía no tiene presupuesto o gasto real capturado (no hay nada que comparar).
+// <=90% del presupuesto: En rango. 91-110%: Al límite. >110%: Sobre presupuesto.
+const SALUD_PRESUPUESTO_COLOR = {
+  "En rango": [y.successBg, y.success],
+  "Al límite": [y.warningBg, y.warning],
+  "Sobre presupuesto": [y.dangerBg, y.danger]
+};
+function saludPresupuesto(p) {
+  const presupuesto = parseFloat(p.presupuesto);
+  const gasto = parseFloat(p.gasto_real);
+  if (!presupuesto || isNaN(presupuesto) || presupuesto <= 0 || isNaN(gasto)) return null;
+  const pct = Math.round((gasto / presupuesto) * 100);
+  const nivel = pct <= 90 ? "En rango" : pct <= 110 ? "Al límite" : "Sobre presupuesto";
+  return { pct, nivel, presupuesto, gasto };
+}
+
 // Calcula si un proyecto está vencido o a punto de vencer según su fecha_fin real,
 // sin depender de que alguien haya cambiado manualmente el campo "estado".
 // Los proyectos ya Cumplidos o Cancelados no generan alerta.
@@ -309,7 +326,7 @@ const nuevoProyecto = () => ({
   _key: Date.now() + Math.random(),
   codigo:"", categoria:"CI", prioridad:3, nombre:"", area:"", pais_id:"",
   responsable:"", ticket:"", fecha_solicitud:"", fecha_inicio:"", fecha_fin:"", avance:0, estado:"Pendiente",
-  presupuesto:"", archivo_nombre:"", observacion:""
+  presupuesto:"", gasto_real:"", archivo_nombre:"", observacion:""
 });
 
 function SectionTitle({ children, first }) {
@@ -729,6 +746,7 @@ function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, respon
       prioridad: parseInt(rest.prioridad) || 3,
       avance: parseFloat(rest.avance) || 0,
       presupuesto: rest.presupuesto === "" || rest.presupuesto === null || rest.presupuesto === undefined ? null : parseFloat(String(rest.presupuesto).replace(/,/g,"")) || 0,
+      gasto_real: rest.gasto_real === "" || rest.gasto_real === null || rest.gasto_real === undefined ? null : parseFloat(String(rest.gasto_real).replace(/,/g,"")) || 0,
       actualizado_en: new Date().toISOString(),
       actualizado_por: (session && session.nombre) || "Usuario"
     };
@@ -925,12 +943,19 @@ function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, respon
             </div>
 
             <SectionTitle>Presupuesto y archivos</SectionTitle>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:12}}>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:10,marginBottom:10}}>
               <div>
-                <label style={labelStyle}>Presupuesto</label>
+                <label style={labelStyle}>Presupuesto (planeado)</label>
                 <div style={{position:"relative"}}>
                   <span style={{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)",color:y.text3,fontSize:12.5,fontWeight:700,pointerEvents:"none"}}>$</span>
                   <input value={current.presupuesto ?? ""} onChange={e => updateField(active,"presupuesto",e.target.value)} placeholder="0.00" style={{...inputStyle,fontSize:12.5,paddingLeft:22}} />
+                </div>
+              </div>
+              <div>
+                <label style={labelStyle}>Gasto real</label>
+                <div style={{position:"relative"}}>
+                  <span style={{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)",color:y.text3,fontSize:12.5,fontWeight:700,pointerEvents:"none"}}>$</span>
+                  <input value={current.gasto_real ?? ""} onChange={e => updateField(active,"gasto_real",e.target.value)} placeholder="0.00" style={{...inputStyle,fontSize:12.5,paddingLeft:22}} />
                 </div>
               </div>
               <div>
@@ -942,6 +967,26 @@ function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, respon
                 <input value={current.archivo_nombre||""} onChange={e => updateField(active,"archivo_nombre",e.target.value)} placeholder="Nombre o enlace del archivo" style={{...inputStyle,fontSize:12.5}} />
               </div>
             </div>
+
+            {(() => {
+              const salud = saludPresupuesto(current);
+              if (!salud) return null;
+              const [saludBg, saludColor] = SALUD_PRESUPUESTO_COLOR[salud.nivel] || [y.grayBg, y.gray];
+              return (
+                <div style={{background:y.grayBg,border:"1px solid "+y.border,borderRadius:10,padding:"0.7rem 0.9rem",marginBottom:12,display:"flex",alignItems:"center",gap:12}}>
+                  <div style={{flex:1}}>
+                    <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:y.text3,marginBottom:4}}>
+                      <span>Gastado: ${salud.gasto.toLocaleString("es-HN")} de ${salud.presupuesto.toLocaleString("es-HN")}</span>
+                      <span>{salud.pct}%</span>
+                    </div>
+                    <div style={{height:7,borderRadius:20,background:y.border,position:"relative"}}>
+                      <span style={{position:"absolute",left:0,top:0,bottom:0,borderRadius:20,background:saludColor,width:Math.min(salud.pct,100)+"%"}}/>
+                    </div>
+                  </div>
+                  <span style={{display:"inline-flex",padding:"3px 10px",borderRadius:20,fontSize:11,fontWeight:700,background:saludBg,color:saludColor,whiteSpace:"nowrap"}}>{salud.nivel}</span>
+                </div>
+              );
+            })()}
 
             <SectionTitle>Descripción</SectionTitle>
             <textarea value={current.observacion} onChange={e => updateField(active,"observacion",e.target.value)} rows={3} placeholder="Describe el proyecto: qué se va a hacer, notas u observaciones..." style={{...inputStyle,width:"100%",resize:"vertical",fontSize:12.5,lineHeight:1.6}} />
@@ -1902,6 +1947,8 @@ function App() {
       "Avance (%)": Math.round(avanceEfectivo(p, tareasPorProyecto[p.id]) * 100),
       "Estado": p.estado || "",
       "Presupuesto": p.presupuesto !== null && p.presupuesto !== undefined && p.presupuesto !== "" ? parseFloat(p.presupuesto) || 0 : "",
+      "Gasto real": p.gasto_real !== null && p.gasto_real !== undefined && p.gasto_real !== "" ? parseFloat(p.gasto_real) || 0 : "",
+      "Desviación (%)": saludPresupuesto(p) ? saludPresupuesto(p).pct - 100 : "",
       "Archivo": p.archivo_nombre || "",
       "Observación": p.observacion || ""
     }));
@@ -1923,7 +1970,9 @@ function App() {
       (p.fecha_inicio || "") + (p.fecha_fin ? " → " + p.fecha_fin : ""),
       Math.round(avanceEfectivo(p, tareasPorProyecto[p.id]) * 100) + "%",
       p.estado || "",
-      p.presupuesto !== null && p.presupuesto !== undefined && p.presupuesto !== "" ? "$" + (parseFloat(p.presupuesto) || 0).toLocaleString("es-HN") : ""
+      p.presupuesto !== null && p.presupuesto !== undefined && p.presupuesto !== "" ? "$" + (parseFloat(p.presupuesto) || 0).toLocaleString("es-HN") : "",
+      p.gasto_real !== null && p.gasto_real !== undefined && p.gasto_real !== "" ? "$" + (parseFloat(p.gasto_real) || 0).toLocaleString("es-HN") : "",
+      saludPresupuesto(p) ? saludPresupuesto(p).nivel : ""
     ]);
     doc.setFontSize(14);
     doc.text("Proyectos — Kielsa CI", 14, 15);
@@ -1931,7 +1980,7 @@ function App() {
     doc.setTextColor(120);
     doc.text("Generado el " + new Date().toLocaleDateString("es-HN") + " · " + filtrados.length + " proyecto(s)", 14, 21);
     doc.autoTable({
-      head: [["Cód.", "Categoría", "Nombre", "Área", "País", "Responsable", "Fechas", "Avance", "Estado", "Presupuesto"]],
+      head: [["Cód.", "Categoría", "Nombre", "Área", "País", "Responsable", "Fechas", "Avance", "Estado", "Presupuesto", "Gastado", "Salud"]],
       body: filas,
       startY: 26,
       styles: { fontSize: 8, cellPadding: 2 },
@@ -2217,19 +2266,20 @@ function App() {
                   <table style={{borderCollapse:"collapse",width:"100%",minWidth:1100}}>
                     <thead>
                       <tr style={{background:y.grayBg}}>
-                        {["Cód.","Categoría","Nombre","Área","País","Responsable","Fechas","Avance","Estado","Acciones"].map(h => (
+                        {["Cód.","Categoría","Nombre","Área","País","Responsable","Fechas","Avance","Presupuesto","Estado","Acciones"].map(h => (
                           <th key={h} style={{padding:"0.5rem 0.6rem",textAlign:"left",fontSize:10,fontWeight:700,color:y.text3,borderBottom:"2px solid "+y.border2,textTransform:"uppercase",whiteSpace:"nowrap"}}>{h}</th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
                       {filtrados.length === 0 && (
-                        <tr><td colSpan={10} style={{padding:"2rem",textAlign:"center",color:y.text3}}>Sin proyectos</td></tr>
+                        <tr><td colSpan={11} style={{padding:"2rem",textAlign:"center",color:y.text3}}>Sin proyectos</td></tr>
                       )}
                       {filtrados.map(p => {
                         const tareasP = tareasPorProyecto[p.id] || [];
                         const avancePct = Math.round(avanceEfectivo(p, tareasP)*100);
                         const v = estadoVencimiento(p);
+                        const salud = saludPresupuesto(p);
                         return (
                           <tr key={p.id} style={{borderBottom:"1px solid "+y.border}}>
                             <td style={{padding:"6px 8px",fontSize:12}}>{p.codigo}</td>
@@ -2247,6 +2297,14 @@ function App() {
                               )}
                             </td>
                             <td style={{padding:"6px 8px",fontSize:12}}>{avancePct}%{tareasP.length > 0 && <div style={{fontSize:10,color:y.text3}}>{tareasP.filter(t=>t.completada).length}/{tareasP.length} tareas</div>}</td>
+                            <td style={{padding:"6px 8px",fontSize:11,color:y.text3}}>
+                              {p.presupuesto ? "$"+parseFloat(p.presupuesto).toLocaleString("es-HN") : "—"}
+                              {salud && (
+                                <div style={{marginTop:2}}>
+                                  <span style={{display:"inline-flex",padding:"2px 7px",borderRadius:20,fontSize:9.5,fontWeight:700,background:SALUD_PRESUPUESTO_COLOR[salud.nivel][0],color:SALUD_PRESUPUESTO_COLOR[salud.nivel][1],whiteSpace:"nowrap"}}>{salud.pct}% · {salud.nivel}</span>
+                                </div>
+                              )}
+                            </td>
                             <td style={{padding:"6px 8px"}}><Badge label={p.estado || "Pendiente"} /></td>
                             <td style={{padding:"6px 8px",whiteSpace:"nowrap"}}>
                               {puedeEditar && <Btn sm onClick={() => setModal({mode:"edit", project:p})}><i className="ti ti-pencil"/></Btn>}{" "}

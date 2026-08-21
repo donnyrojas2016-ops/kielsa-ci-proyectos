@@ -32,7 +32,7 @@ Usa el mismo usuario y contraseña que ya usas para entrar a Kielsa CI (se valid
 - Menú lateral con Usuarios, Accesos, Áreas, Países y Responsables (catálogos) además de Proyectos — ver sección "Menú lateral" abajo.
 - Agregar proyectos (uno o varios a la vez, mismo formulario tipo pestañas que usas en Hallazgos).
 - Editar y eliminar proyectos.
-- Formulario de proyecto rediseñado (ver secciones más abajo): secciones claras (Datos generales, Asignación, Fechas y estado, Presupuesto y archivos, Descripción), pestaña de **Cronograma** con línea de tiempo (Gantt) y ruta crítica, y pestaña de **Riesgos** con matriz de probabilidad × impacto.
+- Formulario de proyecto rediseñado (ver secciones más abajo): secciones claras (Datos generales, Asignación, Fechas y estado, Presupuesto y archivos, Descripción), pestaña de **Cronograma** con línea de tiempo (Gantt) y ruta crítica, pestaña de **Riesgos** con matriz de probabilidad × impacto, y comparación de **presupuesto vs. gasto real** con semáforo de salud.
 - Exportar a Excel y a PDF la lista filtrada (incluye la columna Presupuesto).
 
 ## Activar los comentarios (una sola vez en Supabase)
@@ -213,6 +213,27 @@ grant select, insert, update, delete on proyecto_riesgos to anon, authenticated;
 
 3. Listo. En cuanto subas el `index.html` de este paquete, la pestaña "Riesgos" de cada proyecto ya podrá crear, editar y eliminar riesgos.
 
+## Costo real vs. planeado
+
+Tercera mejora del diagnóstico: junto al Presupuesto (planeado) ahora hay un campo **Gasto real**, para capturar cuánto se ha gastado de verdad en el proyecto. En cuanto los dos campos tienen un valor, aparece automáticamente una barra comparando ambos, con un porcentaje y una etiqueta de salud: **En rango** (hasta 90% del presupuesto gastado), **Al límite** (91%–110%) o **Sobre presupuesto** (más de 110%) — los mismos tres colores (verde/amarillo/rojo) que ya usas en otras partes de la app.
+
+Esa misma etiqueta de salud ahora también aparece en la vista de tabla de Proyectos, en una columna nueva "Presupuesto", para que puedas ver de un vistazo qué proyectos se están saliendo de presupuesto sin tener que entrar a cada uno. Y tanto el Excel como el PDF exportado ahora incluyen el gasto real y la desviación, además del presupuesto planeado.
+
+Este es el primer paso hacia lo que los estándares llaman "Valor Ganado" (comparar lo planeado, lo ganado según el avance, y lo gastado) — con presupuesto y gasto real ya capturados, ese cálculo completo queda mucho más cerca si más adelante lo quieres agregar.
+
+### Activar el campo de gasto real (una sola vez en Supabase)
+
+Esta es una columna nueva en la tabla `proyectos` que ya existe y ya funciona, así que **no hace falta tocar permisos ni RLS**:
+
+1. Entra a supabase.com → tu proyecto → **SQL Editor** → **New query**.
+2. Pega y ejecuta (botón **Run**) exactamente esto:
+
+```sql
+alter table proyectos add column if not exists gasto_real numeric;
+```
+
+3. Listo. En cuanto subas el `index.html` de este paquete, el campo "Gasto real" y la comparación de presupuesto ya funcionan.
+
 ## Verificación realizada
 
 Antes de entregarla, probé el archivo con un navegador automatizado (React + Babel compilando sin errores) simulando datos de Supabase, cubriendo: login → agregar/editar/eliminar proyecto → KPIs y lista actualizados; Kanban (arrastrar y soltar entre columnas); alertas de vencimiento; comentarios/bitácora (agregar y borrar); roles y permisos (Administrador ve todo, Editor no puede eliminar, Solo lectura no puede editar); el menú lateral completo (Usuarios, Accesos, Áreas, Países, Responsables, Proyectos), el alta/edición/baja de Áreas y Responsables, que los nuevos valores aparecen de inmediato como opción en el formulario de proyectos, y la descarga en PDF — todo sin errores de consola.
@@ -221,4 +242,6 @@ En esta última ronda (formulario rediseñado y Cronograma) probé además: abri
 
 Después, ya con la línea de tiempo (Gantt) y la ruta crítica, probé con un proyecto de prueba con tareas encadenadas por dependencia (una tarea depende de la anterior, y esa de otra) que la ruta crítica calculada coincidiera con la cadena que realmente determina la fecha de fin del proyecto — y no con una tarea vencida pero aislada que no afecta el fin real —, que las barras del Gantt quedaran bien ubicadas y del tamaño correcto según sus fechas, que la franja de % de avance se viera dentro de cada barra, y que una tarea sin fecha de inicio o de entrega se mostrara como "Sin fechas" en vez de romper la escala del resto. Todo sin errores de consola.
 
-Con el registro de riesgos probé: abrir la pestaña Riesgos y ver los riesgos existentes con su nivel ya calculado; agregar un riesgo nuevo y verlo aparecer con los valores por defecto (Media/Medio); editar un riesgo existente y confirmar que el formulario se llena con sus datos; que un riesgo Alto/Alto salga en nivel "Alto" y dispare el aviso rojo, mientras que uno Media/Medio sale en "Medio" sin disparar el aviso; y que el contador de la pestaña ("Riesgos 3") se actualice al agregar. Todo sin errores de consola. Los íconos y las llamadas reales a Supabase no se pudieron probar en vivo desde este entorno (no tiene salida a internet), así que la primera prueba real de conexión a datos debe hacerse ya en Vercel, después de correr el SQL de esta sección.
+Con el registro de riesgos probé: abrir la pestaña Riesgos y ver los riesgos existentes con su nivel ya calculado; agregar un riesgo nuevo y verlo aparecer con los valores por defecto (Media/Medio); editar un riesgo existente y confirmar que el formulario se llena con sus datos; que un riesgo Alto/Alto salga en nivel "Alto" y dispare el aviso rojo, mientras que uno Media/Medio sale en "Medio" sin disparar el aviso; y que el contador de la pestaña ("Riesgos 3") se actualice al agregar. Todo sin errores de consola.
+
+Con el costo real vs. planeado probé: capturar un gasto real mayor al presupuesto y ver que la barra y la etiqueta salgan en rojo ("Sobre presupuesto") tanto en la pestaña Datos como en la columna nueva de la tabla de Proyectos; que el porcentaje se calcule bien (gasto real ÷ presupuesto); y que la exportación a Excel y PDF incluya el gasto real y la desviación sin errores. Todo sin errores de consola. Los íconos y las llamadas reales a Supabase no se pudieron probar en vivo desde este entorno (no tiene salida a internet), así que la primera prueba real de conexión a datos debe hacerse ya en Vercel, después de correr el SQL de esta sección.
