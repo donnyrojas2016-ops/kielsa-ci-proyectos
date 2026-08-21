@@ -32,7 +32,8 @@ Usa el mismo usuario y contraseña que ya usas para entrar a Kielsa CI (se valid
 - Menú lateral con Usuarios, Accesos, Áreas, Países y Responsables (catálogos) además de Proyectos — ver sección "Menú lateral" abajo.
 - Agregar proyectos (uno o varios a la vez, mismo formulario tipo pestañas que usas en Hallazgos).
 - Editar y eliminar proyectos.
-- Exportar a Excel y a PDF la lista filtrada.
+- Formulario de proyecto rediseñado (ver sección "Nuevo formulario de proyecto y Cronograma" abajo): secciones claras (Datos generales, Asignación, Fechas y estado, Presupuesto y archivos, Descripción) más una pestaña de **Cronograma** con tareas al estilo Gantt (responsable, dependencias, fechas, % de avance y estatus).
+- Exportar a Excel y a PDF la lista filtrada (incluye la columna Presupuesto).
 
 ## Activar los comentarios (una sola vez en Supabase)
 
@@ -137,6 +138,44 @@ alter table proyecto_usuario_paises disable row level security;
 
 Junto al botón de Excel hay uno nuevo de **PDF**: descarga exactamente la misma lista de proyectos que se ve filtrada en pantalla (mismas columnas que el Excel), en un PDF horizontal listo para imprimir o compartir.
 
+## Nuevo formulario de proyecto y Cronograma
+
+Rediseñé por completo el formulario de "Agregar/Editar proyecto" con el formato clásico por secciones que me pediste, usando como referencia el Excel que me compartiste. Al editar un proyecto ahora hay tres pestañas:
+
+- **Datos del proyecto** — organizado en secciones: Datos generales (código, categoría, prioridad, nombre), Asignación (área, país, responsable), Fechas y estado (fecha de solicitud, fecha de inicio, vencimiento, estado y avance), Presupuesto y archivos (presupuesto, ticket, archivo/documento) y Descripción. Abajo del todo se ve un pequeño texto con la fecha y el usuario de la última actualización.
+- **Cronograma** — la tabla de tareas del proyecto, estilo Gantt: cada tarea tiene número EDT (automático, según el orden), responsable, de qué otra tarea depende, fecha de inicio y de entrega, días de duración (calculados solos), % de avance y estatus (Pendiente / En proceso / Completada). Si una tarea no está completada y ya pasó su fecha de entrega, el sistema la marca sola como **Vencida** en rojo, sin que nadie tenga que cambiarla a mano. El avance general del proyecto ahora es el promedio del % de avance de todas sus tareas (antes solo contaba tareas completas vs. incompletas).
+- **Comentarios** — la misma bitácora de comentarios de antes, ahora en su propia pestaña.
+
+Al agregar un proyecto nuevo (una o varias a la vez) se ve solo la pestaña "Datos del proyecto" — el Cronograma se agrega después de crear el proyecto, desde "Editar".
+
+**Sobre el campo "Archivo / documento":** por ahora es un campo de texto (para poner el nombre del archivo o un enlace, por ejemplo a un Drive o SharePoint), no una carga de archivo real. Lo hice así para no meter la complejidad de subir y guardar archivos (que en Supabase requiere configurar un "bucket" de almacenamiento con sus propios permisos, y ya tuvimos bastante trabajo ajustando permisos con las otras tablas). Si más adelante quieres que sea una carga de archivo de verdad, lo hacemos como una tarea aparte.
+
+### Activar el Cronograma y los campos nuevos (una sola vez en Supabase)
+
+Estas columnas se agregan a las tablas `proyectos` y `proyecto_tareas` que ya existen y ya funcionan, así que **no hace falta tocar permisos ni RLS** — solo agregar las columnas nuevas:
+
+1. Entra a supabase.com → tu proyecto → **SQL Editor** → **New query**.
+2. Pega y ejecuta (botón **Run**) exactamente esto:
+
+```sql
+alter table proyectos add column if not exists fecha_solicitud date;
+alter table proyectos add column if not exists presupuesto numeric;
+alter table proyectos add column if not exists archivo_nombre text;
+alter table proyectos add column if not exists actualizado_en timestamptz;
+alter table proyectos add column if not exists actualizado_por text;
+
+alter table proyecto_tareas add column if not exists responsable text;
+alter table proyecto_tareas add column if not exists fecha_inicio date;
+alter table proyecto_tareas add column if not exists fecha_entrega date;
+alter table proyecto_tareas add column if not exists porcentaje_avance numeric default 0;
+alter table proyecto_tareas add column if not exists estatus text default 'Pendiente';
+alter table proyecto_tareas add column if not exists depende_id bigint;
+```
+
+3. Listo. En cuanto subas el `index.html` de este paquete, el formulario de proyecto ya se ve con las pestañas nuevas y la pestaña Cronograma ya puede guardar tareas con responsable, fechas, dependencia, % de avance y estatus.
+
 ## Verificación realizada
 
-Antes de entregarla, probé el archivo con un navegador automatizado (React + Babel compilando sin errores) simulando datos de Supabase, cubriendo: login → agregar/editar/eliminar proyecto → KPIs y lista actualizados; Kanban (arrastrar y soltar entre columnas); alertas de vencimiento; comentarios/bitácora (agregar y borrar); roles y permisos (Administrador ve todo, Editor no puede eliminar, Solo lectura no puede editar); y en esta última ronda, el menú lateral completo (Usuarios, Accesos, Áreas, Países, Responsables, Proyectos), el alta/edición/baja de Áreas y Responsables, que los nuevos valores aparecen de inmediato como opción en el formulario de proyectos, y la descarga en PDF — todo sin errores de consola. Los íconos y las llamadas reales a Supabase no se pudieron probar en vivo desde este entorno (no tiene salida a internet), así que la primera prueba real de conexión a datos debe hacerse ya en Vercel.
+Antes de entregarla, probé el archivo con un navegador automatizado (React + Babel compilando sin errores) simulando datos de Supabase, cubriendo: login → agregar/editar/eliminar proyecto → KPIs y lista actualizados; Kanban (arrastrar y soltar entre columnas); alertas de vencimiento; comentarios/bitácora (agregar y borrar); roles y permisos (Administrador ve todo, Editor no puede eliminar, Solo lectura no puede editar); el menú lateral completo (Usuarios, Accesos, Áreas, Países, Responsables, Proyectos), el alta/edición/baja de Áreas y Responsables, que los nuevos valores aparecen de inmediato como opción en el formulario de proyectos, y la descarga en PDF — todo sin errores de consola.
+
+En esta última ronda (formulario rediseñado y Cronograma) probé además: abrir un proyecto y moverse entre las tres pestañas (Datos del proyecto, Cronograma, Comentarios); agregar una tarea nueva al Cronograma y verla aparecer con su número EDT, duración calculada y estatus; editar esa misma tarea; que una tarea vencida (fecha de entrega ya pasada y no completada) se marque sola como "Vencida"; que el avance general del proyecto se recalcule como el promedio del % de avance de todas las tareas, tanto en la pestaña Cronograma como en la barra de solo-lectura de la pestaña Datos; que el modo "Agregar proyectos" (uno o varios a la vez) siga funcionando sin pestañas, tal como antes; y que la exportación a Excel y PDF incluya la columna Presupuesto y el avance correcto — todo sin errores de consola. Los íconos y las llamadas reales a Supabase no se pudieron probar en vivo desde este entorno (no tiene salida a internet), así que la primera prueba real de conexión a datos debe hacerse ya en Vercel, después de correr el SQL de esta sección.

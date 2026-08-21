@@ -63,12 +63,48 @@ const ESTADO_COLOR = {
   "Cancelado": [y.grayBg, y.gray]
 };
 
-// Si el proyecto tiene tareas, el avance se calcula solo (completas / total).
+const TAREA_ESTADOS = ["Pendiente","En proceso","Completada"];
+const TAREA_ESTADO_COLOR = {
+  "Pendiente": [y.grayBg, y.gray],
+  "En proceso": [y.warningBg, y.warning],
+  "Completada": [y.successBg, y.success],
+  "Vencida": [y.dangerBg, y.danger]
+};
+
+// % de avance de una tarea individual: usa la columna nueva "porcentaje_avance" si existe;
+// si la tarea es de antes de tener Cronograma, se deriva del check "completada" (100 o 0).
+function avanceTarea(t) {
+  if (t.porcentaje_avance !== null && t.porcentaje_avance !== undefined) return parseFloat(t.porcentaje_avance) || 0;
+  return t.completada ? 100 : 0;
+}
+
+// Estatus que se muestra para una tarea: si ya se marcó "Completada" se respeta,
+// si no, se revisa si ya se pasó de la fecha de entrega para marcarla "Vencida" sola,
+// igual que ya hacemos con la fecha de vencimiento del proyecto.
+function estatusEfectivoTarea(t) {
+  const base = t.estatus || (t.completada ? "Completada" : "Pendiente");
+  if (base === "Completada") return "Completada";
+  if (!t.fecha_entrega) return base;
+  const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+  const fin = new Date(t.fecha_entrega + "T00:00:00");
+  if (!isNaN(fin.getTime()) && fin < hoy) return "Vencida";
+  return base;
+}
+
+function duracionDias(inicio, entrega) {
+  if (!inicio || !entrega) return null;
+  const a = new Date(inicio + "T00:00:00");
+  const b = new Date(entrega + "T00:00:00");
+  if (isNaN(a.getTime()) || isNaN(b.getTime())) return null;
+  return Math.round((b - a) / 86400000);
+}
+
+// Si el proyecto tiene tareas (Cronograma), el avance se calcula solo: promedio del % de avance de cada tarea.
 // Si no tiene tareas todavía, se usa el % que la persona escribió a mano (compatibilidad con proyectos existentes).
 function avanceEfectivo(proyecto, tareasDelProyecto) {
   if (tareasDelProyecto && tareasDelProyecto.length > 0) {
-    const completas = tareasDelProyecto.filter(t => t.completada).length;
-    return completas / tareasDelProyecto.length;
+    const suma = tareasDelProyecto.reduce((s, t) => s + avanceTarea(t), 0);
+    return (suma / tareasDelProyecto.length) / 100;
   }
   return parseFloat(proyecto.avance) || 0;
 }
@@ -117,6 +153,7 @@ function Btn({ children, primary, danger, outline, sm, onClick, disabled, title,
 }
 
 const inputStyle = { width:"100%", padding:"0.45rem 0.75rem", fontSize:13, border:"1px solid "+y.border2, borderRadius:8, background:y.surface, color:y.text, outline:"none", fontFamily:"inherit", boxSizing:"border-box" };
+const labelStyle = { display:"block", fontSize:11, fontWeight:700, color:y.text3, textTransform:"uppercase", letterSpacing:.3, marginBottom:4 };
 
 function Card({ children, mb }) {
   return <div style={{background:y.surface,border:"1px solid "+y.border,borderRadius:12,marginBottom:mb??16,overflow:"hidden",boxShadow:"0 1px 3px rgba(0,0,0,.06)"}}>{children}</div>;
@@ -193,19 +230,118 @@ function Login({ onLogin }) {
 const nuevoProyecto = () => ({
   _key: Date.now() + Math.random(),
   codigo:"", categoria:"CI", prioridad:3, nombre:"", area:"", pais_id:"",
-  responsable:"", ticket:"", fecha_inicio:"", fecha_fin:"", avance:0, estado:"Pendiente", observacion:""
+  responsable:"", ticket:"", fecha_solicitud:"", fecha_inicio:"", fecha_fin:"", avance:0, estado:"Pendiente",
+  presupuesto:"", archivo_nombre:"", observacion:""
 });
+
+function SectionTitle({ children, first }) {
+  return (
+    <div style={{fontSize:11,fontWeight:800,color:y.primary,textTransform:"uppercase",letterSpacing:.4,marginTop:first?0:18,marginBottom:10,display:"flex",alignItems:"center",gap:10}}>
+      <span style={{whiteSpace:"nowrap"}}>{children}</span>
+      <span style={{flex:1,height:1,background:y.border}}/>
+    </div>
+  );
+}
+
+/* ---------- Formulario de una tarea del Cronograma (agregar o editar) ---------- */
+function TareaForm({ tarea, tareasProyecto, responsables, responsablesDisponibles, onGuardar, onCancelar }) {
+  const [titulo, setTitulo] = useState(tarea ? tarea.titulo || "" : "");
+  const [responsable, setResponsable] = useState(tarea ? tarea.responsable || "" : "");
+  const [dependeId, setDependeId] = useState(tarea && tarea.depende_id ? String(tarea.depende_id) : "");
+  const [fechaInicio, setFechaInicio] = useState(tarea ? tarea.fecha_inicio || "" : "");
+  const [fechaEntrega, setFechaEntrega] = useState(tarea ? tarea.fecha_entrega || "" : "");
+  const [avance, setAvance] = useState(tarea ? avanceTarea(tarea) : 0);
+  const [estatus, setEstatus] = useState(tarea ? (tarea.estatus || (tarea.completada ? "Completada" : "Pendiente")) : "Pendiente");
+
+  const opcionesDependencia = tareasProyecto.filter(t => !tarea || t.id !== tarea.id);
+
+  const guardar = () => {
+    if (!titulo.trim()) { alert("El nombre de la tarea es obligatorio."); return; }
+    onGuardar({
+      titulo: titulo.trim(),
+      responsable: responsable || null,
+      depende_id: dependeId ? parseInt(dependeId) : null,
+      fecha_inicio: fechaInicio || null,
+      fecha_entrega: fechaEntrega || null,
+      porcentaje_avance: parseInt(avance) || 0,
+      estatus,
+      completada: estatus === "Completada"
+    });
+  };
+
+  return (
+    <div style={{background:y.primaryLight,border:"1px solid #c7d2fe",borderRadius:10,padding:"0.9rem 1rem",marginBottom:12}}>
+      <div style={{marginBottom:10}}>
+        <label style={{...labelStyle,color:y.primary}}>Nombre de la tarea *</label>
+        <input autoFocus value={titulo} onChange={e => setTitulo(e.target.value)} placeholder="Ej: Descarga de activos fijos de la contabilidad" style={{...inputStyle,fontSize:12.5}} />
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+        <div>
+          <label style={{...labelStyle,color:y.primary}}>Responsable de la tarea</label>
+          {responsablesDisponibles && responsables && responsables.length > 0 ? (
+            <select value={responsable} onChange={e => setResponsable(e.target.value)} style={{...inputStyle,fontSize:12.5}}>
+              <option value="">—</option>
+              {responsable && !responsables.some(r => r.nombre === responsable) && <option value={responsable}>{responsable}</option>}
+              {responsables.map(r => <option key={r.id} value={r.nombre}>{r.nombre}</option>)}
+            </select>
+          ) : (
+            <input value={responsable} onChange={e => setResponsable(e.target.value)} style={{...inputStyle,fontSize:12.5}} />
+          )}
+        </div>
+        <div>
+          <label style={{...labelStyle,color:y.primary}}>Depende de</label>
+          <select value={dependeId} onChange={e => setDependeId(e.target.value)} style={{...inputStyle,fontSize:12.5}}>
+            <option value="">— Ninguna —</option>
+            {opcionesDependencia.map((t, i) => (
+              <option key={t.id} value={t.id}>EDT {tareasProyecto.indexOf(t) + 1} — {t.titulo.substring(0,30)}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+        <div>
+          <label style={{...labelStyle,color:y.primary}}>Fecha de inicio</label>
+          <input type="date" value={fechaInicio} onChange={e => setFechaInicio(e.target.value)} style={{...inputStyle,fontSize:12.5}} />
+        </div>
+        <div>
+          <label style={{...labelStyle,color:y.primary}}>Fecha de entrega</label>
+          <input type="date" value={fechaEntrega} onChange={e => setFechaEntrega(e.target.value)} style={{...inputStyle,fontSize:12.5}} />
+        </div>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
+        <div>
+          <label style={{...labelStyle,color:y.primary}}>% de avance</label>
+          <div style={{display:"flex",alignItems:"center",gap:8}}>
+            <input type="range" min={0} max={100} value={avance} onChange={e => setAvance(parseInt(e.target.value))} style={{flex:1}} />
+            <span style={{fontSize:12,fontWeight:700,color:y.primary,minWidth:32}}>{avance}%</span>
+          </div>
+        </div>
+        <div>
+          <label style={{...labelStyle,color:y.primary}}>Estatus</label>
+          <select value={estatus} onChange={e => { setEstatus(e.target.value); if (e.target.value === "Completada") setAvance(100); }} style={{...inputStyle,fontSize:12.5}}>
+            {TAREA_ESTADOS.map(s => <option key={s}>{s}</option>)}
+          </select>
+        </div>
+      </div>
+      <div style={{display:"flex",justifyContent:"flex-end",gap:8}}>
+        <Btn sm onClick={onCancelar}>Cancelar</Btn>
+        <Btn sm primary onClick={guardar}>{tarea ? "Guardar cambios" : "Agregar tarea"}</Btn>
+      </div>
+    </div>
+  );
+}
 
 function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, responsables, responsablesDisponibles, editProject, onClose, onSaved, onTareasChanged }) {
   const [drafts, setDrafts] = useState(() => editProject ? [{ ...editProject }] : [nuevoProyecto()]);
   const [active, setActive] = useState(0);
   const [saving, setSaving] = useState(false);
+  const [tab, setTab] = useState("datos"); // datos | cronograma | comentarios (solo aplica en modo edición)
 
-  // ---- Tareas del proyecto (solo aplica en modo edición, sobre un proyecto ya guardado) ----
+  // ---- Tareas / Cronograma del proyecto (solo aplica en modo edición, sobre un proyecto ya guardado) ----
   const [tareasProyecto, setTareasProyecto] = useState([]);
   const [cargandoTareas, setCargandoTareas] = useState(false);
   const [tareasDisponibles, setTareasDisponibles] = useState(true);
-  const [nuevaTarea, setNuevaTarea] = useState("");
+  const [tareaForm, setTareaForm] = useState(null); // null | {mode:"add"} | {mode:"edit", tarea}
 
   // ---- Comentarios / bitácora del proyecto (solo aplica en modo edición) ----
   const [comentarios, setComentarios] = useState([]);
@@ -232,33 +368,26 @@ function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, respon
     })();
   }, [editProject]);
 
-  const agregarTarea = async () => {
-    const titulo = nuevaTarea.trim();
-    if (!titulo || !editProject) return;
+  const guardarTarea = async (payload) => {
     try {
-      const { data, error } = await supabase.from("proyecto_tareas").insert({ proyectoId: editProject.id, titulo, completada: false }).select();
-      if (error) throw error;
-      setTareasProyecto(list => [...list, ...(data || [])]);
-      setNuevaTarea("");
+      if (tareaForm && tareaForm.mode === "edit") {
+        const { error } = await supabase.from("proyecto_tareas").update(payload).eq("id", tareaForm.tarea.id);
+        if (error) throw error;
+        setTareasProyecto(list => list.map(t => t.id === tareaForm.tarea.id ? { ...t, ...payload } : t));
+      } else {
+        const { data, error } = await supabase.from("proyecto_tareas").insert({ proyectoId: editProject.id, ...payload }).select();
+        if (error) throw error;
+        setTareasProyecto(list => [...list, ...(data || [])]);
+      }
+      setTareaForm(null);
       onTareasChanged && onTareasChanged();
     } catch (e) {
-      alert("No se pudo agregar la tarea: " + (e.message || e));
-    }
-  };
-
-  const toggleTarea = async (tarea) => {
-    setTareasProyecto(list => list.map(t => t.id === tarea.id ? { ...t, completada: !tarea.completada } : t));
-    try {
-      const { error } = await supabase.from("proyecto_tareas").update({ completada: !tarea.completada }).eq("id", tarea.id);
-      if (error) throw error;
-      onTareasChanged && onTareasChanged();
-    } catch (e) {
-      alert("No se pudo actualizar la tarea: " + (e.message || e));
-      setTareasProyecto(list => list.map(t => t.id === tarea.id ? { ...t, completada: tarea.completada } : t));
+      alert("No se pudo guardar la tarea: " + (e.message || e) + (/column/i.test(e.message||"") ? "\n\n(Puede que falte correr el SQL del Cronograma en Supabase — ver README.)" : ""));
     }
   };
 
   const eliminarTarea = async (tarea) => {
+    if (!window.confirm('¿Eliminar la tarea "' + tarea.titulo + '"?')) return;
     setTareasProyecto(list => list.filter(t => t.id !== tarea.id));
     try {
       const { error } = await supabase.from("proyecto_tareas").delete().eq("id", tarea.id);
@@ -270,8 +399,7 @@ function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, respon
     }
   };
 
-  const tareasCompletas = tareasProyecto.filter(t => t.completada).length;
-  const avancePctTareas = tareasProyecto.length ? Math.round((tareasCompletas / tareasProyecto.length) * 100) : 0;
+  const avancePctTareas = tareasProyecto.length ? Math.round(tareasProyecto.reduce((s,t) => s + avanceTarea(t), 0) / tareasProyecto.length) : 0;
 
   useEffect(() => {
     if (!editProject) return;
@@ -333,7 +461,15 @@ function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, respon
 
   const normalize = d => {
     const { _key, id, ...rest } = d;
-    return { ...rest, pais_id: rest.pais_id ? parseInt(rest.pais_id) : null, prioridad: parseInt(rest.prioridad) || 3, avance: parseFloat(rest.avance) || 0 };
+    return {
+      ...rest,
+      pais_id: rest.pais_id ? parseInt(rest.pais_id) : null,
+      prioridad: parseInt(rest.prioridad) || 3,
+      avance: parseFloat(rest.avance) || 0,
+      presupuesto: rest.presupuesto === "" || rest.presupuesto === null || rest.presupuesto === undefined ? null : parseFloat(String(rest.presupuesto).replace(/,/g,"")) || 0,
+      actualizado_en: new Date().toISOString(),
+      actualizado_por: (session && session.nombre) || "Usuario"
+    };
   };
 
   const save = async () => {
@@ -354,7 +490,7 @@ function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, respon
       onSaved();
     } catch (e) {
       console.error(e);
-      alert("No se pudo guardar: " + (e.message || e));
+      alert("No se pudo guardar: " + (e.message || e) + (/column/i.test(e.message||"") ? "\n\n(Puede que falte correr el SQL nuevo en Supabase — ver README.)" : ""));
     } finally {
       setSaving(false);
     }
@@ -402,64 +538,77 @@ function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, respon
           </div>
         )}
 
+        {editProject && (
+          <div style={{display:"flex",gap:22,padding:"0 1.25rem",background:y.grayBg,borderBottom:"1px solid "+y.border,flexShrink:0}}>
+            {[
+              { key:"datos", label:"Datos del proyecto", icon:"ti-file-text" },
+              { key:"cronograma", label:"Cronograma", icon:"ti-calendar-stats", count: tareasProyecto.length },
+              { key:"comentarios", label:"Comentarios", icon:"ti-message-circle", count: comentarios.length }
+            ].map(t => (
+              <div key={t.key} onClick={() => setTab(t.key)} style={{
+                padding:"0.7rem 0.1rem",cursor:"pointer",fontSize:13,fontWeight:700,
+                color: tab === t.key ? y.primary : y.text3,
+                borderBottom: tab === t.key ? "2px solid "+y.primary : "2px solid transparent",
+                display:"flex",alignItems:"center",gap:6,whiteSpace:"nowrap"
+              }}>
+                <i className={"ti "+t.icon} style={{fontSize:14}}/>
+                {t.label}
+                {t.count > 0 && <span style={{background:y.primaryLight,color:y.primary,fontSize:10.5,fontWeight:800,padding:"1px 7px",borderRadius:20}}>{t.count}</span>}
+              </div>
+            ))}
+          </div>
+        )}
+
         <div style={{flex:1,overflowY:"auto",padding:"1.25rem"}}>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:10,marginBottom:14}}>
-            <div>
-              <label style={labelStyle}>Código</label>
-              <input value={current.codigo} onChange={e => updateField(active,"codigo",e.target.value)} style={{...inputStyle,fontSize:12}} />
-            </div>
-            <div>
-              <label style={labelStyle}>Categoría</label>
-              <select value={current.categoria} onChange={e => updateField(active,"categoria",e.target.value)} style={{...inputStyle,fontSize:12}}>
-                {CATEGORIAS.map(c => <option key={c}>{c}</option>)}
-              </select>
-            </div>
-            <div>
-              <label style={labelStyle}>Prioridad</label>
-              <select value={current.prioridad} onChange={e => updateField(active,"prioridad",e.target.value)} style={{...inputStyle,fontSize:12}}>
-                <option value={1}>Alta</option>
-                <option value={2}>Media</option>
-                <option value={3}>Normal</option>
-              </select>
-            </div>
-            <div>
-              <label style={labelStyle}>Ticket</label>
-              <input value={current.ticket} onChange={e => updateField(active,"ticket",e.target.value)} style={{...inputStyle,fontSize:12}} />
-            </div>
-          </div>
 
-          <div style={{background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:10,padding:"0.85rem 1rem",marginBottom:14}}>
-            <div style={{fontSize:12,fontWeight:700,color:"#c2410c",marginBottom:8,display:"flex",alignItems:"center",gap:6}}>
-              <i className="ti ti-pencil"/> Nombre del proyecto *
-            </div>
-            <textarea value={current.nombre} onChange={e => updateField(active,"nombre",e.target.value)} placeholder="Ej: Automatización de conciliaciones bancarias..." rows={2} style={{...inputStyle,width:"100%",fontSize:14,fontWeight:600,lineHeight:1.6,resize:"vertical"}} />
-          </div>
-
-          <div style={{background:y.primaryLight,border:"1px solid #c7d2fe",borderRadius:10,padding:"1rem",marginBottom:14}}>
-            <div style={{fontSize:12,fontWeight:700,color:y.primary,marginBottom:12,display:"flex",alignItems:"center",gap:6}}>
-              <i className="ti ti-list-details"/> Detalle del proyecto
-            </div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+        {(!editProject || tab === "datos") && (
+          <React.Fragment>
+            <SectionTitle first>Datos generales</SectionTitle>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:12}}>
               <div>
-                <label style={{...labelStyle,color:y.primary}}>Área</label>
-                <select value={current.area} onChange={e => updateField(active,"area",e.target.value)} style={{...inputStyle,fontSize:12}}>
+                <label style={labelStyle}>Código</label>
+                <input value={current.codigo} onChange={e => updateField(active,"codigo",e.target.value)} style={{...inputStyle,fontSize:12.5}} />
+              </div>
+              <div>
+                <label style={labelStyle}>Categoría</label>
+                <select value={current.categoria} onChange={e => updateField(active,"categoria",e.target.value)} style={{...inputStyle,fontSize:12.5}}>
+                  {CATEGORIAS.map(c => <option key={c}>{c}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={labelStyle}>Prioridad</label>
+                <select value={current.prioridad} onChange={e => updateField(active,"prioridad",e.target.value)} style={{...inputStyle,fontSize:12.5}}>
+                  <option value={1}>Alta</option>
+                  <option value={2}>Media</option>
+                  <option value={3}>Normal</option>
+                </select>
+              </div>
+            </div>
+            <div>
+              <label style={labelStyle}>Nombre del proyecto *</label>
+              <textarea value={current.nombre} onChange={e => updateField(active,"nombre",e.target.value)} placeholder="Ej: Automatización de conciliaciones bancarias..." rows={2} style={{...inputStyle,width:"100%",fontSize:14,fontWeight:600,lineHeight:1.5,resize:"vertical"}} />
+            </div>
+
+            <SectionTitle>Asignación</SectionTitle>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
+              <div>
+                <label style={labelStyle}>Área</label>
+                <select value={current.area} onChange={e => updateField(active,"area",e.target.value)} style={{...inputStyle,fontSize:12.5}}>
                   <option value="">—</option>
                   {(areasDisponibles && areasCatalogo && areasCatalogo.length > 0 ? areasCatalogo.map(a => a.nombre) : AREAS).map(a => <option key={a}>{a}</option>)}
                 </select>
               </div>
               <div>
-                <label style={{...labelStyle,color:y.primary}}>País</label>
-                <select value={current.pais_id} onChange={e => updateField(active,"pais_id",e.target.value)} style={{...inputStyle,fontSize:12}}>
+                <label style={labelStyle}>País</label>
+                <select value={current.pais_id} onChange={e => updateField(active,"pais_id",e.target.value)} style={{...inputStyle,fontSize:12.5}}>
                   <option value="">—</option>
                   {paises.map(p => <option key={p.id} value={p.id}>{bandera(p.nombre)} {p.nombre}</option>)}
                 </select>
               </div>
-            </div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
               <div>
-                <label style={{...labelStyle,color:y.primary}}>Responsable</label>
+                <label style={labelStyle}>Responsable</label>
                 {responsablesDisponibles && responsables && responsables.length > 0 ? (
-                  <select value={current.responsable || ""} onChange={e => updateField(active,"responsable",e.target.value)} style={{...inputStyle,fontSize:12}}>
+                  <select value={current.responsable || ""} onChange={e => updateField(active,"responsable",e.target.value)} style={{...inputStyle,fontSize:12.5}}>
                     <option value="">—</option>
                     {current.responsable && !responsables.some(r => r.nombre === current.responsable) && (
                       <option value={current.responsable}>{current.responsable}</option>
@@ -467,117 +616,206 @@ function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, respon
                     {responsables.map(r => <option key={r.id} value={r.nombre}>{r.nombre}</option>)}
                   </select>
                 ) : (
-                  <input value={current.responsable} onChange={e => updateField(active,"responsable",e.target.value)} style={{...inputStyle,fontSize:12}} />
+                  <input value={current.responsable} onChange={e => updateField(active,"responsable",e.target.value)} style={{...inputStyle,fontSize:12.5}} />
                 )}
               </div>
+            </div>
+
+            <SectionTitle>Fechas y estado</SectionTitle>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:12}}>
               <div>
-                <label style={{...labelStyle,color:y.primary}}>Estado</label>
-                <select value={current.estado} onChange={e => updateField(active,"estado",e.target.value)} style={{...inputStyle,fontSize:12}}>
+                <label style={labelStyle}>Fecha de solicitud</label>
+                <input type="date" value={current.fecha_solicitud||""} onChange={e => updateField(active,"fecha_solicitud",e.target.value)} style={{...inputStyle,fontSize:12.5}} />
+              </div>
+              <div>
+                <label style={labelStyle}>Fecha de inicio</label>
+                <input type="date" value={current.fecha_inicio} onChange={e => updateField(active,"fecha_inicio",e.target.value)} style={{...inputStyle,fontSize:12.5}} />
+              </div>
+              <div>
+                <label style={labelStyle}>Vencimiento</label>
+                <input type="date" value={current.fecha_fin} onChange={e => updateField(active,"fecha_fin",e.target.value)} style={{...inputStyle,fontSize:12.5}} />
+              </div>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+              <div>
+                <label style={labelStyle}>Estado</label>
+                <select value={current.estado} onChange={e => updateField(active,"estado",e.target.value)} style={{...inputStyle,fontSize:12.5}}>
                   {ESTADOS.map(s => <option key={s}>{s}</option>)}
                 </select>
               </div>
-            </div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
               <div>
-                <label style={{...labelStyle,color:y.primary}}>Fecha inicio</label>
-                <input type="date" value={current.fecha_inicio} onChange={e => updateField(active,"fecha_inicio",e.target.value)} style={{...inputStyle,fontSize:12}} />
-              </div>
-              <div>
-                <label style={{...labelStyle,color:y.primary}}>Fecha fin</label>
-                <input type="date" value={current.fecha_fin} onChange={e => updateField(active,"fecha_fin",e.target.value)} style={{...inputStyle,fontSize:12}} />
-              </div>
-            </div>
-            <div style={{marginBottom:10}}>
-              <label style={{...labelStyle,color:y.primary}}>Avance</label>
-              {editProject && tareasDisponibles && tareasProyecto.length > 0 ? (
-                <React.Fragment>
-                  <div style={{display:"flex",alignItems:"center",gap:8}}>
+                <label style={labelStyle}>Avance{editProject && tareasDisponibles && tareasProyecto.length > 0 ? " (según el Cronograma)" : ""}</label>
+                {editProject && tareasDisponibles && tareasProyecto.length > 0 ? (
+                  <div style={{display:"flex",alignItems:"center",gap:8,marginTop:9}}>
                     <div style={{flex:1,height:8,background:y.border,borderRadius:4,overflow:"hidden"}}>
                       <div style={{height:"100%",borderRadius:4,background:y.primary,width:avancePctTareas+"%"}}/>
                     </div>
-                    <span style={{fontSize:12,fontWeight:700,color:y.primary,minWidth:80,textAlign:"right"}}>{avancePctTareas}% ({tareasCompletas}/{tareasProyecto.length})</span>
+                    <span style={{fontSize:12,fontWeight:700,color:y.primary,minWidth:36,textAlign:"right"}}>{avancePctTareas}%</span>
                   </div>
-                  <div style={{fontSize:10,color:y.text3,marginTop:4}}>Se calcula solo, según las tareas completadas abajo.</div>
-                </React.Fragment>
-              ) : (
-                <div style={{display:"flex",alignItems:"center",gap:8}}>
-                  <input type="range" min={0} max={100} value={Math.round((current.avance||0)*100) <= 100 ? Math.round((current.avance||0)*100) : current.avance||0} onChange={e => updateField(active,"avance",parseInt(e.target.value)/100)} style={{flex:1}} />
-                  <span style={{fontSize:12,fontWeight:700,color:y.primary,minWidth:32}}>{Math.round((current.avance||0)*100)}%</span>
+                ) : (
+                  <div style={{display:"flex",alignItems:"center",gap:8,marginTop:9}}>
+                    <input type="range" min={0} max={100} value={Math.round((current.avance||0)*100) <= 100 ? Math.round((current.avance||0)*100) : current.avance||0} onChange={e => updateField(active,"avance",parseInt(e.target.value)/100)} style={{flex:1}} />
+                    <span style={{fontSize:12,fontWeight:700,color:y.primary,minWidth:32}}>{Math.round((current.avance||0)*100)}%</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <SectionTitle>Presupuesto y archivos</SectionTitle>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:12}}>
+              <div>
+                <label style={labelStyle}>Presupuesto</label>
+                <div style={{position:"relative"}}>
+                  <span style={{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)",color:y.text3,fontSize:12.5,fontWeight:700,pointerEvents:"none"}}>$</span>
+                  <input value={current.presupuesto ?? ""} onChange={e => updateField(active,"presupuesto",e.target.value)} placeholder="0.00" style={{...inputStyle,fontSize:12.5,paddingLeft:22}} />
                 </div>
-              )}
-            </div>
-            <div>
-              <label style={{...labelStyle,color:y.primary}}>Observación</label>
-              <textarea value={current.observacion} onChange={e => updateField(active,"observacion",e.target.value)} rows={3} placeholder="Notas adicionales sobre el proyecto..." style={{...inputStyle,width:"100%",resize:"vertical",fontSize:12,lineHeight:1.6}} />
-            </div>
-          </div>
-
-          {editProject && (
-            <div style={{background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:10,padding:"1rem",marginBottom:14}}>
-              <div style={{fontSize:12,fontWeight:700,color:"#166534",marginBottom:12,display:"flex",alignItems:"center",gap:6}}>
-                <i className="ti ti-checklist"/> Tareas del proyecto
-                {tareasProyecto.length > 0 && <span style={{fontWeight:400,color:y.text3,marginLeft:4}}>({tareasCompletas}/{tareasProyecto.length} completas)</span>}
               </div>
-              {!tareasDisponibles ? (
-                <div style={{fontSize:12,color:y.text3}}>Esta función todavía no está activada en la base de datos (falta crear la tabla "proyecto_tareas").</div>
-              ) : cargandoTareas ? (
-                <div style={{fontSize:12,color:y.text3}}>Cargando tareas...</div>
-              ) : (
-                <React.Fragment>
-                  <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:10}}>
-                    {tareasProyecto.length === 0 && <div style={{fontSize:12,color:y.text3}}>Sin tareas todavía — agrega la primera abajo.</div>}
-                    {tareasProyecto.map(t => (
-                      <div key={t.id} style={{display:"flex",alignItems:"center",gap:8,background:y.surface,border:"1px solid "+y.border,borderRadius:8,padding:"6px 10px"}}>
-                        <input type="checkbox" checked={!!t.completada} onChange={() => toggleTarea(t)} style={{width:16,height:16,cursor:"pointer",flexShrink:0}} />
-                        <span style={{flex:1,fontSize:12,color:t.completada?y.text3:y.text,textDecoration:t.completada?"line-through":"none"}}>{t.titulo}</span>
-                        <button onClick={() => eliminarTarea(t)} style={{background:"none",border:"none",color:y.text3,cursor:"pointer",fontSize:15,lineHeight:1,padding:2}}>×</button>
-                      </div>
-                    ))}
-                  </div>
-                  <div style={{display:"flex",gap:6}}>
-                    <input value={nuevaTarea} onChange={e => setNuevaTarea(e.target.value)} onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); agregarTarea(); } }} placeholder="Nueva tarea..." style={{...inputStyle,fontSize:12}} />
-                    <Btn sm onClick={agregarTarea}><i className="ti ti-plus"/></Btn>
-                  </div>
-                </React.Fragment>
-              )}
-            </div>
-          )}
-
-          {editProject && (
-            <div style={{background:y.purpleBg,border:"1px solid #ddd6fe",borderRadius:10,padding:"1rem"}}>
-              <div style={{fontSize:12,fontWeight:700,color:y.purple,marginBottom:12,display:"flex",alignItems:"center",gap:6}}>
-                <i className="ti ti-message-circle"/> Comentarios / bitácora
-                {comentarios.length > 0 && <span style={{fontWeight:400,color:y.text3,marginLeft:4}}>({comentarios.length})</span>}
+              <div>
+                <label style={labelStyle}>Ticket</label>
+                <input value={current.ticket} onChange={e => updateField(active,"ticket",e.target.value)} style={{...inputStyle,fontSize:12.5}} />
               </div>
-              {!comentariosDisponibles ? (
-                <div style={{fontSize:12,color:y.text3}}>Esta función todavía no está activada en la base de datos (falta crear la tabla "proyecto_comentarios").</div>
-              ) : cargandoComentarios ? (
-                <div style={{fontSize:12,color:y.text3}}>Cargando comentarios...</div>
-              ) : (
-                <React.Fragment>
-                  <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:10,maxHeight:220,overflowY:"auto"}}>
-                    {comentarios.length === 0 && <div style={{fontSize:12,color:y.text3}}>Sin comentarios todavía — escribe el primero abajo.</div>}
-                    {comentarios.map(c => (
-                      <div key={c.id} style={{background:y.surface,border:"1px solid "+y.border,borderRadius:8,padding:"0.55rem 0.7rem"}}>
-                        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginBottom:3}}>
-                          <div style={{display:"flex",alignItems:"baseline",gap:6,minWidth:0}}>
-                            <span style={{fontSize:12,fontWeight:700,color:y.text}}>{c.autor || "Usuario"}</span>
-                            <span style={{fontSize:10,color:y.text3}}>{formatearFecha(c.createdAt)}</span>
-                          </div>
-                          <button onClick={() => eliminarComentario(c)} style={{background:"none",border:"none",color:y.text3,cursor:"pointer",fontSize:15,lineHeight:1,padding:2,flexShrink:0}}>×</button>
+              <div>
+                <label style={labelStyle}>Archivo / documento</label>
+                <input value={current.archivo_nombre||""} onChange={e => updateField(active,"archivo_nombre",e.target.value)} placeholder="Nombre o enlace del archivo" style={{...inputStyle,fontSize:12.5}} />
+              </div>
+            </div>
+
+            <SectionTitle>Descripción</SectionTitle>
+            <textarea value={current.observacion} onChange={e => updateField(active,"observacion",e.target.value)} rows={3} placeholder="Describe el proyecto: qué se va a hacer, notas u observaciones..." style={{...inputStyle,width:"100%",resize:"vertical",fontSize:12.5,lineHeight:1.6}} />
+
+            {editProject && editProject.actualizado_en && (
+              <div style={{fontSize:11,color:y.text3,display:"flex",alignItems:"center",gap:5,marginTop:14}}>
+                <i className="ti ti-clock" style={{fontSize:12}}/>
+                Última actualización: {formatearFecha(editProject.actualizado_en)} — {editProject.actualizado_por || "—"}
+              </div>
+            )}
+          </React.Fragment>
+        )}
+
+        {editProject && tab === "cronograma" && (
+          <React.Fragment>
+            <div style={{background:y.grayBg,border:"1px solid "+y.border,borderRadius:10,padding:"0.75rem 1rem",marginBottom:14,display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,fontSize:12,color:y.text2}}>
+              <div>Proyecto: <strong style={{color:y.text}}>{current.nombre || "—"}</strong></div>
+              <div>Responsable: <strong style={{color:y.text}}>{current.responsable || "—"}</strong></div>
+              <div>País: <strong style={{color:y.text}}>{current.pais_id ? bandera((paises.find(p=>p.id===parseInt(current.pais_id))||{}).nombre) + " " + ((paises.find(p=>p.id===parseInt(current.pais_id))||{}).nombre || "") : "—"}</strong></div>
+              <div>Inicio: <strong style={{color:y.text}}>{current.fecha_inicio || "—"}</strong></div>
+            </div>
+
+            {!tareasDisponibles ? (
+              <div style={{fontSize:12,color:y.text3}}>Esta función todavía no está activada en la base de datos (falta crear la tabla "proyecto_tareas").</div>
+            ) : cargandoTareas ? (
+              <div style={{fontSize:12,color:y.text3}}>Cargando cronograma...</div>
+            ) : (
+              <React.Fragment>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+                  <span style={{fontSize:12.5,fontWeight:700,color:y.text}}>{tareasProyecto.length} {tareasProyecto.length===1?"tarea":"tareas"}</span>
+                  {!tareaForm && <Btn sm primary onClick={() => setTareaForm({mode:"add"})}><i className="ti ti-plus"/> Agregar tarea</Btn>}
+                </div>
+
+                {tareaForm && (
+                  <TareaForm
+                    tarea={tareaForm.mode === "edit" ? tareaForm.tarea : null}
+                    tareasProyecto={tareasProyecto}
+                    responsables={responsables}
+                    responsablesDisponibles={responsablesDisponibles}
+                    onGuardar={guardarTarea}
+                    onCancelar={() => setTareaForm(null)}
+                  />
+                )}
+
+                {tareasProyecto.length === 0 ? (
+                  <div style={{fontSize:12,color:y.text3,padding:"1rem 0"}}>Sin tareas todavía — agrega la primera con el botón de arriba.</div>
+                ) : (
+                  <div style={{overflowX:"auto"}}>
+                    <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+                      <thead>
+                        <tr style={{background:y.grayBg}}>
+                          {["EDT","Tarea","Responsable","Depende de","Inicio","Entrega","Días","% Avance","Estatus",""].map(h => (
+                            <th key={h} style={{textAlign:"left",fontSize:10,fontWeight:800,color:y.text3,textTransform:"uppercase",letterSpacing:.3,padding:"0.5rem 0.5rem",borderBottom:"1px solid "+y.border,whiteSpace:"nowrap"}}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {tareasProyecto.map((t, i) => {
+                          const est = estatusEfectivoTarea(t);
+                          const [estBg, estColor] = TAREA_ESTADO_COLOR[est] || [y.grayBg, y.gray];
+                          const dias = duracionDias(t.fecha_inicio, t.fecha_entrega);
+                          const dep = t.depende_id ? tareasProyecto.findIndex(x => x.id === t.depende_id) : -1;
+                          const pct = avanceTarea(t);
+                          return (
+                            <tr key={t.id} style={{borderBottom:"1px solid "+y.grayBg}}>
+                              <td style={{padding:"0.5rem",fontWeight:800,color:y.text3,fontSize:11}}>{i+1}</td>
+                              <td style={{padding:"0.5rem",color:y.text,maxWidth:220}}>{t.titulo}</td>
+                              <td style={{padding:"0.5rem",color:y.text2,whiteSpace:"nowrap"}}>{t.responsable || "—"}</td>
+                              <td style={{padding:"0.5rem",color:y.text3,whiteSpace:"nowrap"}}>{dep >= 0 ? "EDT " + (dep+1) : "—"}</td>
+                              <td style={{padding:"0.5rem",color:y.text2,whiteSpace:"nowrap"}}>{t.fecha_inicio || "—"}</td>
+                              <td style={{padding:"0.5rem",color:y.text2,whiteSpace:"nowrap"}}>{t.fecha_entrega || "—"}</td>
+                              <td style={{padding:"0.5rem",color:y.text2}}>{dias!=null ? dias : "—"}</td>
+                              <td style={{padding:"0.5rem",whiteSpace:"nowrap"}}>
+                                <span style={{display:"inline-block",width:44,height:6,borderRadius:20,background:y.border,position:"relative",marginRight:6,verticalAlign:"middle"}}>
+                                  <span style={{position:"absolute",left:0,top:0,bottom:0,borderRadius:20,background:y.primary,width:pct+"%"}}/>
+                                </span>
+                                {pct}%
+                              </td>
+                              <td style={{padding:"0.5rem"}}>
+                                <span style={{display:"inline-flex",padding:"3px 9px",borderRadius:20,fontSize:10.5,fontWeight:700,background:estBg,color:estColor,whiteSpace:"nowrap"}}>{est}</span>
+                              </td>
+                              <td style={{padding:"0.5rem",textAlign:"right",whiteSpace:"nowrap"}}>
+                                <button onClick={() => setTareaForm({mode:"edit", tarea:t})} style={{background:"none",border:"none",color:y.text3,cursor:"pointer",padding:3}} title="Editar"><i className="ti ti-pencil" style={{fontSize:13}}/></button>
+                                <button onClick={() => eliminarTarea(t)} style={{background:"none",border:"none",color:y.text3,cursor:"pointer",padding:3}} title="Eliminar"><i className="ti ti-trash" style={{fontSize:13}}/></button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {tareasProyecto.length > 0 && (
+                  <div style={{background:y.primaryLight,borderRadius:10,padding:"0.75rem 1rem",marginTop:14,display:"flex",alignItems:"center",gap:12,fontSize:12.5,color:y.text2}}>
+                    <i className="ti ti-chart-bar" style={{color:y.primary}}/>
+                    Avance general del proyecto (promedio de {tareasProyecto.length} {tareasProyecto.length===1?"tarea":"tareas"}):
+                    <strong style={{color:y.primary}}>{avancePctTareas}%</strong>
+                  </div>
+                )}
+              </React.Fragment>
+            )}
+          </React.Fragment>
+        )}
+
+        {editProject && tab === "comentarios" && (
+          <React.Fragment>
+            {!comentariosDisponibles ? (
+              <div style={{fontSize:12,color:y.text3}}>Esta función todavía no está activada en la base de datos (falta crear la tabla "proyecto_comentarios").</div>
+            ) : cargandoComentarios ? (
+              <div style={{fontSize:12,color:y.text3}}>Cargando comentarios...</div>
+            ) : (
+              <React.Fragment>
+                <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:10}}>
+                  {comentarios.length === 0 && <div style={{fontSize:12,color:y.text3}}>Sin comentarios todavía — escribe el primero abajo.</div>}
+                  {comentarios.map(c => (
+                    <div key={c.id} style={{background:y.grayBg,border:"1px solid "+y.border,borderRadius:8,padding:"0.6rem 0.75rem"}}>
+                      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginBottom:3}}>
+                        <div style={{display:"flex",alignItems:"baseline",gap:6,minWidth:0}}>
+                          <span style={{fontSize:12,fontWeight:700,color:y.text}}>{c.autor || "Usuario"}</span>
+                          <span style={{fontSize:10,color:y.text3}}>{formatearFecha(c.createdAt)}</span>
                         </div>
-                        <div style={{fontSize:12.5,color:y.text2,whiteSpace:"pre-wrap"}}>{c.texto}</div>
+                        <button onClick={() => eliminarComentario(c)} style={{background:"none",border:"none",color:y.text3,cursor:"pointer",fontSize:15,lineHeight:1,padding:2,flexShrink:0}}>×</button>
                       </div>
-                    ))}
-                  </div>
-                  <div style={{display:"flex",gap:6,alignItems:"flex-end"}}>
-                    <textarea value={nuevoComentario} onChange={e => setNuevoComentario(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); agregarComentario(); } }} placeholder="Escribe un comentario para el equipo..." rows={2} style={{...inputStyle,fontSize:12,resize:"vertical"}} />
-                    <Btn sm primary disabled={enviandoComentario || !nuevoComentario.trim()} onClick={agregarComentario}><i className="ti ti-send"/> Enviar</Btn>
-                  </div>
-                </React.Fragment>
-              )}
-            </div>
-          )}
+                      <div style={{fontSize:12.5,color:y.text2,whiteSpace:"pre-wrap"}}>{c.texto}</div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{display:"flex",gap:6,alignItems:"flex-end"}}>
+                  <textarea value={nuevoComentario} onChange={e => setNuevoComentario(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); agregarComentario(); } }} placeholder="Escribe un comentario para el equipo..." rows={2} style={{...inputStyle,fontSize:12.5,resize:"vertical"}} />
+                  <Btn sm primary disabled={enviandoComentario || !nuevoComentario.trim()} onClick={agregarComentario}><i className="ti ti-send"/> Enviar</Btn>
+                </div>
+              </React.Fragment>
+            )}
+          </React.Fragment>
+        )}
+
         </div>
 
         <div style={{padding:"0.75rem 1.25rem",borderTop:"1px solid "+y.border,display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0,background:y.grayBg}}>
@@ -595,7 +833,6 @@ function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, respon
     </div>
   );
 }
-const labelStyle = { display:"block", fontSize:10, fontWeight:700, color:y.text3, textTransform:"uppercase", marginBottom:4 };
 
 /* ---------- Confirmar eliminación ---------- */
 function ConfirmDelete({ nombre, onConfirm, onClose, deleting }) {
@@ -1313,10 +1550,13 @@ function App() {
       "País": nombrePais(p.pais_id),
       "Responsable": p.responsable || "",
       "Ticket": p.ticket || "",
+      "Fecha de solicitud": p.fecha_solicitud || "",
       "Fecha inicio": p.fecha_inicio || "",
       "Fecha fin": p.fecha_fin || "",
-      "Avance (%)": Math.round((parseFloat(p.avance)||0)*100),
+      "Avance (%)": Math.round(avanceEfectivo(p, tareasPorProyecto[p.id]) * 100),
       "Estado": p.estado || "",
+      "Presupuesto": p.presupuesto !== null && p.presupuesto !== undefined && p.presupuesto !== "" ? parseFloat(p.presupuesto) || 0 : "",
+      "Archivo": p.archivo_nombre || "",
       "Observación": p.observacion || ""
     }));
     const ws = XLSX.utils.json_to_sheet(filas);
@@ -1335,8 +1575,9 @@ function App() {
       nombrePais(p.pais_id),
       p.responsable || "",
       (p.fecha_inicio || "") + (p.fecha_fin ? " → " + p.fecha_fin : ""),
-      Math.round((parseFloat(p.avance) || 0) * 100) + "%",
-      p.estado || ""
+      Math.round(avanceEfectivo(p, tareasPorProyecto[p.id]) * 100) + "%",
+      p.estado || "",
+      p.presupuesto !== null && p.presupuesto !== undefined && p.presupuesto !== "" ? "$" + (parseFloat(p.presupuesto) || 0).toLocaleString("es-HN") : ""
     ]);
     doc.setFontSize(14);
     doc.text("Proyectos — Kielsa CI", 14, 15);
@@ -1344,7 +1585,7 @@ function App() {
     doc.setTextColor(120);
     doc.text("Generado el " + new Date().toLocaleDateString("es-HN") + " · " + filtrados.length + " proyecto(s)", 14, 21);
     doc.autoTable({
-      head: [["Cód.", "Categoría", "Nombre", "Área", "País", "Responsable", "Fechas", "Avance", "Estado"]],
+      head: [["Cód.", "Categoría", "Nombre", "Área", "País", "Responsable", "Fechas", "Avance", "Estado", "Presupuesto"]],
       body: filas,
       startY: 26,
       styles: { fontSize: 8, cellPadding: 2 },
