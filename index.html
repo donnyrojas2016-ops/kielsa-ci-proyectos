@@ -451,6 +451,9 @@ function TareaForm({ tarea, tareasProyecto, responsables, responsablesDisponible
   const [fechaEntrega, setFechaEntrega] = useState(tarea ? tarea.fecha_entrega || "" : "");
   const [avance, setAvance] = useState(tarea ? avanceTarea(tarea) : 0);
   const [estatus, setEstatus] = useState(tarea ? (tarea.estatus || (tarea.completada ? "Completada" : "Pendiente")) : "Pendiente");
+  const [aprobador, setAprobador] = useState(tarea ? tarea.aprobador || "" : "");
+  const [consultados, setConsultados] = useState(tarea ? tarea.consultados || "" : "");
+  const [informados, setInformados] = useState(tarea ? tarea.informados || "" : "");
 
   const opcionesDependencia = tareasProyecto.filter(t => !tarea || t.id !== tarea.id);
 
@@ -464,7 +467,10 @@ function TareaForm({ tarea, tareasProyecto, responsables, responsablesDisponible
       fecha_entrega: fechaEntrega || null,
       porcentaje_avance: parseInt(avance) || 0,
       estatus,
-      completada: estatus === "Completada"
+      completada: estatus === "Completada",
+      aprobador: aprobador || null,
+      consultados: consultados.trim() || null,
+      informados: informados.trim() || null
     });
   };
 
@@ -522,6 +528,31 @@ function TareaForm({ tarea, tareasProyecto, responsables, responsablesDisponible
           </select>
         </div>
       </div>
+
+      <div style={{fontSize:10.5,fontWeight:800,color:y.primary,textTransform:"uppercase",letterSpacing:.4,marginBottom:6,marginTop:2}}>Matriz RACI de la tarea</div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+        <div>
+          <label style={{...labelStyle,color:y.primary}}>Aprobador (A — rinde cuentas)</label>
+          {responsablesDisponibles && responsables && responsables.length > 0 ? (
+            <select value={aprobador} onChange={e => setAprobador(e.target.value)} style={{...inputStyle,fontSize:12.5}}>
+              <option value="">—</option>
+              {aprobador && !responsables.some(r => r.nombre === aprobador) && <option value={aprobador}>{aprobador}</option>}
+              {responsables.map(r => <option key={r.id} value={r.nombre}>{r.nombre}</option>)}
+            </select>
+          ) : (
+            <input value={aprobador} onChange={e => setAprobador(e.target.value)} style={{...inputStyle,fontSize:12.5}} />
+          )}
+        </div>
+        <div>
+          <label style={{...labelStyle,color:y.primary}}>Consultados (C)</label>
+          <input value={consultados} onChange={e => setConsultados(e.target.value)} placeholder="Nombres separados por coma" style={{...inputStyle,fontSize:12.5}} />
+        </div>
+      </div>
+      <div style={{marginBottom:12}}>
+        <label style={{...labelStyle,color:y.primary}}>Informados (I)</label>
+        <input value={informados} onChange={e => setInformados(e.target.value)} placeholder="Nombres separados por coma" style={{...inputStyle,fontSize:12.5}} />
+      </div>
+
       <div style={{display:"flex",justifyContent:"flex-end",gap:8}}>
         <Btn sm onClick={onCancelar}>Cancelar</Btn>
         <Btn sm primary onClick={guardar}>{tarea ? "Guardar cambios" : "Agregar tarea"}</Btn>
@@ -612,6 +643,7 @@ function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, respon
   const [cargandoTareas, setCargandoTareas] = useState(false);
   const [tareasDisponibles, setTareasDisponibles] = useState(true);
   const [tareaForm, setTareaForm] = useState(null); // null | {mode:"add"} | {mode:"edit", tarea}
+  const [mostrarRaci, setMostrarRaci] = useState(false);
 
   // ---- Riesgos del proyecto (solo aplica en modo edición) ----
   const [riesgosProyecto, setRiesgosProyecto] = useState([]);
@@ -1116,10 +1148,46 @@ function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, respon
               <div style={{fontSize:12,color:y.text3}}>Cargando cronograma...</div>
             ) : (
               <React.Fragment>
-                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,gap:8,flexWrap:"wrap"}}>
                   <span style={{fontSize:12.5,fontWeight:700,color:y.text}}>{tareasProyecto.length} {tareasProyecto.length===1?"tarea":"tareas"}</span>
-                  {!tareaForm && <Btn sm primary onClick={() => setTareaForm({mode:"add"})}><i className="ti ti-plus"/> Agregar tarea</Btn>}
+                  <div style={{display:"flex",gap:8}}>
+                    {tareasProyecto.length > 0 && (
+                      <Btn sm onClick={() => setMostrarRaci(v => !v)}><i className="ti ti-table"/> {mostrarRaci ? "Ocultar" : "Ver"} matriz RACI</Btn>
+                    )}
+                    {!tareaForm && <Btn sm primary onClick={() => setTareaForm({mode:"add"})}><i className="ti ti-plus"/> Agregar tarea</Btn>}
+                  </div>
                 </div>
+
+                {mostrarRaci && tareasProyecto.length > 0 && (
+                  <div style={{background:y.grayBg,borderRadius:10,padding:"0.85rem 1rem",marginBottom:14}}>
+                    <div style={{fontSize:11,color:y.text3,marginBottom:8}}>
+                      <strong style={{color:y.text2}}>R</strong> Responsable (ejecuta) · <strong style={{color:y.text2}}>A</strong> Aprobador (rinde cuentas) · <strong style={{color:y.text2}}>C</strong> Consultado · <strong style={{color:y.text2}}>I</strong> Informado
+                    </div>
+                    <div style={{overflowX:"auto"}}>
+                      <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,background:y.surface,borderRadius:8}}>
+                        <thead>
+                          <tr>
+                            {["EDT","Tarea","R","A","C","I"].map(h => (
+                              <th key={h} style={{textAlign:"left",fontSize:10,fontWeight:800,color:y.text3,textTransform:"uppercase",letterSpacing:.3,padding:"0.5rem 0.5rem",borderBottom:"1px solid "+y.border,whiteSpace:"nowrap"}}>{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {tareasProyecto.map((t, i) => (
+                            <tr key={t.id} style={{borderBottom:"1px solid "+y.grayBg}}>
+                              <td style={{padding:"0.5rem",fontWeight:800,color:y.text3,fontSize:11}}>{i+1}</td>
+                              <td style={{padding:"0.5rem",color:y.text,maxWidth:200}}>{t.titulo}</td>
+                              <td style={{padding:"0.5rem",color:y.text2,whiteSpace:"nowrap"}}>{t.responsable || "—"}</td>
+                              <td style={{padding:"0.5rem",color:y.text2,whiteSpace:"nowrap"}}>{t.aprobador || "—"}</td>
+                              <td style={{padding:"0.5rem",color:y.text2,maxWidth:180}}>{t.consultados || "—"}</td>
+                              <td style={{padding:"0.5rem",color:y.text2,maxWidth:180}}>{t.informados || "—"}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
 
                 {tareaForm && (
                   <TareaForm

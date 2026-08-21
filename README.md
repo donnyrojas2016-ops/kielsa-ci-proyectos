@@ -32,7 +32,7 @@ Usa el mismo usuario y contraseña que ya usas para entrar a Kielsa CI (se valid
 - Menú lateral con Usuarios, Accesos, Áreas, Países, Responsables y Carga de trabajo (catálogos e informativas) además de Proyectos — ver sección "Menú lateral" abajo.
 - Agregar proyectos (uno o varios a la vez, mismo formulario tipo pestañas que usas en Hallazgos).
 - Editar y eliminar proyectos.
-- Formulario de proyecto rediseñado (ver secciones más abajo): secciones claras (Datos generales, Asignación, Fechas y estado, Presupuesto y archivos, Descripción), pestaña de **Cronograma** con línea de tiempo (Gantt) y ruta crítica, pestaña de **Riesgos** con matriz de probabilidad × impacto, comparación de **presupuesto vs. gasto real** con semáforo de salud, vista de **Carga de trabajo** por persona, y pestaña de **Historial de cambios** que registra automáticamente quién cambió qué y cuándo.
+- Formulario de proyecto rediseñado (ver secciones más abajo): secciones claras (Datos generales, Asignación, Fechas y estado, Presupuesto y archivos, Descripción), pestaña de **Cronograma** con línea de tiempo (Gantt), ruta crítica y **matriz RACI** por tarea, pestaña de **Riesgos** con matriz de probabilidad × impacto, comparación de **presupuesto vs. gasto real** con semáforo de salud, vista de **Carga de trabajo** por persona, y pestaña de **Historial de cambios** que registra automáticamente quién cambió qué y cuándo.
 - Exportar a Excel y a PDF la lista filtrada (incluye la columna Presupuesto).
 
 ## Activar los comentarios (una sola vez en Supabase)
@@ -269,6 +269,27 @@ grant select, insert, update, delete on proyecto_cambios to anon, authenticated;
 
 3. Listo. En cuanto subas el `index.html` de este paquete, la pestaña "Historial de cambios" de cada proyecto empezará a registrar automáticamente cada edición que se guarde a partir de ese momento (los cambios hechos antes de activar la tabla no se pueden recuperar, porque no se guardaron en ningún lado).
 
+## Matriz RACI por tarea
+
+Sexta y última mejora del diagnóstico: dentro de la pestaña Cronograma, cada tarea ahora tiene su propia mini "matriz RACI" además del Responsable de siempre. Al agregar o editar una tarea vas a ver una sección nueva, "Matriz RACI de la tarea", con tres campos: **Aprobador** (quien rinde cuentas por el resultado — se elige del mismo catálogo de Responsables), **Consultados** (a quién se le pide opinión antes o durante la tarea) e **Informados** (a quién se le avisa del avance o resultado, sin que participe directamente) — estos dos últimos son de texto libre, para poner uno o varios nombres separados por coma.
+
+Para verlos todos juntos sin tener que abrir tarea por tarea, arriba de la tabla del Cronograma hay un botón **"Ver matriz RACI"** que despliega una tabla compacta con una fila por tarea y una columna por cada letra (R/A/C/I), con su leyenda arriba. Esto responde a lo que piden los estándares de gestión de proyectos sobre roles y responsabilidades claras: quién ejecuta (R, el Responsable de siempre) no tiene por qué ser lo mismo que quién aprueba (A), y ambos son distintos de a quién solo se consulta o se informa.
+
+### Activar la matriz RACI (una sola vez en Supabase)
+
+Estas son columnas nuevas en la tabla `proyecto_tareas` que ya existe y ya funciona, así que **no hace falta tocar permisos ni RLS**:
+
+1. Entra a supabase.com → tu proyecto → **SQL Editor** → **New query**.
+2. Pega y ejecuta (botón **Run**) exactamente esto:
+
+```sql
+alter table proyecto_tareas add column if not exists aprobador text;
+alter table proyecto_tareas add column if not exists consultados text;
+alter table proyecto_tareas add column if not exists informados text;
+```
+
+3. Listo. En cuanto subas el `index.html` de este paquete, el formulario de tareas ya muestra los campos de Aprobador/Consultados/Informados, y el botón "Ver matriz RACI" ya funciona.
+
 ## Verificación realizada
 
 Antes de entregarla, probé el archivo con un navegador automatizado (React + Babel compilando sin errores) simulando datos de Supabase, cubriendo: login → agregar/editar/eliminar proyecto → KPIs y lista actualizados; Kanban (arrastrar y soltar entre columnas); alertas de vencimiento; comentarios/bitácora (agregar y borrar); roles y permisos (Administrador ve todo, Editor no puede eliminar, Solo lectura no puede editar); el menú lateral completo (Usuarios, Accesos, Áreas, Países, Responsables, Proyectos), el alta/edición/baja de Áreas y Responsables, que los nuevos valores aparecen de inmediato como opción en el formulario de proyectos, y la descarga en PDF — todo sin errores de consola.
@@ -283,4 +304,6 @@ Con el costo real vs. planeado probé: capturar un gasto real mayor al presupues
 
 Con la carga de trabajo probé, usando tareas de dos proyectos distintos asignadas a las mismas personas: que las tareas se agrupen bien por responsable sumando de todos los proyectos (no solo uno); que el conteo de tareas activas y vencidas salga correcto; que la lista de proyectos por persona se arme bien; que las tareas sin responsable se agrupen aparte como "Sin asignar"; y que la etiqueta de carga (Baja/Media/Alta) coincida con los umbrales esperados. Todo sin errores de consola.
 
-Con el registro de cambios probé: abrir la pestaña "Historial de cambios" de un proyecto con un cambio ya registrado y ver la fila con su fecha, usuario, campo, valor anterior tachado y valor nuevo; editar el proyecto cambiando el Estado y el Presupuesto y guardar; reabrir el proyecto y confirmar que las dos filas nuevas aparecen solas en el historial, con el campo correcto ("Estado", "Presupuesto"), el valor anterior real (no el que estaba en el formulario a medio llenar) y el valor nuevo ya formateado (el presupuesto con el signo "$"); y que guardar sin cambiar nada relevante no agregue filas de más. Todo sin errores de consola. Los íconos y las llamadas reales a Supabase no se pudieron probar en vivo desde este entorno (no tiene salida a internet), así que la primera prueba real de conexión a datos debe hacerse ya en Vercel.
+Con el registro de cambios probé: abrir la pestaña "Historial de cambios" de un proyecto con un cambio ya registrado y ver la fila con su fecha, usuario, campo, valor anterior tachado y valor nuevo; editar el proyecto cambiando el Estado y el Presupuesto y guardar; reabrir el proyecto y confirmar que las dos filas nuevas aparecen solas en el historial, con el campo correcto ("Estado", "Presupuesto"), el valor anterior real (no el que estaba en el formulario a medio llenar) y el valor nuevo ya formateado (el presupuesto con el signo "$"); y que guardar sin cambiar nada relevante no agregue filas de más. Todo sin errores de consola.
+
+Con la matriz RACI probé: abrir el botón "Ver matriz RACI" de un proyecto con tareas que ya tenían Aprobador/Consultados/Informados capturados y confirmar que la tabla compacta los muestra bien, uno por columna; editar una tarea que no tenía nada de RACI, llenar el Aprobador (de la lista de Responsables), Consultados e Informados (texto libre) y guardar; confirmar que la matriz se actualiza sola, sin recargar, con los valores nuevos en la fila correcta; y, ya con la pestaña cerrada y el proyecto completo guardado, reabrirlo desde cero y confirmar que los datos de RACI siguen ahí (no se perdieron al recargar desde el origen de datos). Todo sin errores de consola. Los íconos y las llamadas reales a Supabase no se pudieron probar en vivo desde este entorno (no tiene salida a internet), así que la primera prueba real de conexión a datos debe hacerse ya en Vercel.
