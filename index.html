@@ -100,6 +100,20 @@ const RIESGO_NIVEL_COLOR = {
   "Alto": [y.dangerBg, y.danger]
 };
 
+/* ---------- Carga de trabajo ---------- */
+// Nivel de carga según cuántas tareas activas (no completadas) tiene una persona
+// en TODOS los proyectos a la vez. 1-2: Baja. 3-5: Media. 6+: Alta.
+const CARGA_COLOR = {
+  "Baja": [y.successBg, y.success],
+  "Media": [y.warningBg, y.warning],
+  "Alta": [y.dangerBg, y.danger]
+};
+function nivelCarga(activas) {
+  if (activas <= 2) return "Baja";
+  if (activas <= 5) return "Media";
+  return "Alta";
+}
+
 // % de avance de una tarea individual: usa la columna nueva "porcentaje_avance" si existe;
 // si la tarea es de antes de tener Cronograma, se deriva del check "completada" (100 o 0).
 function avanceTarea(t) {
@@ -1699,6 +1713,81 @@ function CatalogoView({ titulo, descripcion, icono, tabla, onChanged }) {
   );
 }
 
+/* ---------- Carga de trabajo por persona ---------- */
+// No necesita tabla nueva: junta las tareas del Cronograma de TODOS los proyectos
+// (que ya se cargan para las alertas y el avance) y las agrupa por responsable.
+function CargaTrabajoView({ tareas, proyectos }) {
+  const proyectoPorId = useMemo(() => {
+    const map = {};
+    proyectos.forEach(p => { map[p.id] = p; });
+    return map;
+  }, [proyectos]);
+
+  const carga = useMemo(() => {
+    const map = {};
+    tareas.forEach(t => {
+      const est = estatusEfectivoTarea(t);
+      if (est === "Completada") return; // la carga solo cuenta tareas activas
+      const nombre = t.responsable && t.responsable.trim() ? t.responsable.trim() : "Sin asignar";
+      if (!map[nombre]) map[nombre] = { nombre, activas:0, vencidas:0, proyectoIds: new Set() };
+      map[nombre].activas++;
+      if (est === "Vencida") map[nombre].vencidas++;
+      if (t.proyectoId) map[nombre].proyectoIds.add(t.proyectoId);
+    });
+    return Object.values(map).sort((a, b) => b.activas - a.activas);
+  }, [tareas]);
+
+  const totalActivas = carga.reduce((s, c) => s + c.activas, 0);
+
+  return (
+    <Card mb={0}>
+      <CardHeader icon="ti-users-group" left={"Carga de trabajo (" + carga.length + " personas)"} right={<span style={{fontSize:11,color:y.text3}}>{totalActivas} tareas activas en total, de todos los proyectos</span>} />
+      <div style={{padding:"1rem 1.1rem"}}>
+        {tareas.length === 0 ? (
+          <div style={{fontSize:12,color:y.text3}}>Todavía no hay tareas del Cronograma en ningún proyecto — esta vista se llena sola en cuanto empieces a usar la pestaña Cronograma.</div>
+        ) : carga.length === 0 ? (
+          <div style={{fontSize:12,color:y.text3}}>Nadie tiene tareas activas en este momento — todo está completado.</div>
+        ) : (
+          <div style={{overflowX:"auto"}}>
+            <table style={{width:"100%",borderCollapse:"collapse",fontSize:12.5}}>
+              <thead>
+                <tr style={{background:y.grayBg}}>
+                  {["Responsable","Tareas activas","Vencidas","Proyectos","Carga"].map(h => (
+                    <th key={h} style={{textAlign:"left",fontSize:10,fontWeight:800,color:y.text3,textTransform:"uppercase",letterSpacing:.3,padding:"0.55rem 0.6rem",borderBottom:"1px solid "+y.border,whiteSpace:"nowrap"}}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {carga.map(c => {
+                  const nivel = nivelCarga(c.activas);
+                  const [nivelBg, nivelColor] = CARGA_COLOR[nivel];
+                  const nombresProyectos = Array.from(c.proyectoIds).map(id => (proyectoPorId[id] || {}).nombre).filter(Boolean);
+                  return (
+                    <tr key={c.nombre} style={{borderBottom:"1px solid "+y.grayBg}}>
+                      <td style={{padding:"0.55rem 0.6rem",fontWeight:700,color: c.nombre === "Sin asignar" ? y.text3 : y.text}}>{c.nombre}</td>
+                      <td style={{padding:"0.55rem 0.6rem"}}>
+                        <span style={{display:"inline-block",width:60,height:6,borderRadius:20,background:y.border,position:"relative",marginRight:8,verticalAlign:"middle"}}>
+                          <span style={{position:"absolute",left:0,top:0,bottom:0,borderRadius:20,background:nivelColor,width:Math.min(c.activas*15,100)+"%"}}/>
+                        </span>
+                        {c.activas}
+                      </td>
+                      <td style={{padding:"0.55rem 0.6rem",color: c.vencidas > 0 ? y.danger : y.text3,fontWeight: c.vencidas > 0 ? 700 : 400}}>{c.vencidas || "—"}</td>
+                      <td style={{padding:"0.55rem 0.6rem",color:y.text3,maxWidth:280,fontSize:11.5}} title={nombresProyectos.join(", ")}>{nombresProyectos.length > 0 ? nombresProyectos.join(", ") : "—"}</td>
+                      <td style={{padding:"0.55rem 0.6rem"}}>
+                        <span style={{display:"inline-flex",padding:"3px 9px",borderRadius:20,fontSize:10.5,fontWeight:700,background:nivelBg,color:nivelColor,whiteSpace:"nowrap"}}>{nivel}</span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </Card>
+  );
+}
+
 /* ---------- Menú lateral ---------- */
 function Sidebar({ vista, setVista, miRol }) {
   const items = [
@@ -1707,6 +1796,7 @@ function Sidebar({ vista, setVista, miRol }) {
     { key:"areas", label:"Áreas", icon:"ti-building", adminOnly:true },
     { key:"paises", label:"Países", icon:"ti-world", adminOnly:true },
     { key:"responsables", label:"Responsables", icon:"ti-user-check", adminOnly:true },
+    { key:"carga", label:"Carga de trabajo", icon:"ti-users-group", adminOnly:false },
     { key:"proyectos", label:"Proyectos", icon:"ti-briefcase", adminOnly:false }
   ];
   return (
@@ -2029,6 +2119,7 @@ function App() {
         {vista === "areas" && <CatalogoView titulo="Áreas" descripcion="Lista de áreas para asignar a un proyecto" icono="ti-building" tabla="proyecto_areas" onChanged={cargarAreas} />}
         {vista === "paises" && <CatalogoView titulo="Países" descripcion="Países para asignar a un proyecto" icono="ti-world" tabla="paises" onChanged={cargarPaises} />}
         {vista === "responsables" && <CatalogoView titulo="Responsables" descripcion="Lista de responsables para asignar a un proyecto" icono="ti-user-check" tabla="proyecto_responsables" onChanged={cargarResponsables} />}
+        {vista === "carga" && <CargaTrabajoView tareas={tareas} proyectos={proyectos} />}
         {vista === "proyectos" && (
         loading ? (
           <div style={{textAlign:"center",padding:"4rem",color:y.text3}}>

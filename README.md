@@ -29,7 +29,7 @@ Usa el mismo usuario y contraseña que ya usas para entrar a Kielsa CI (se valid
 - Alertas automáticas de vencimiento: la campana del encabezado y un panel en el tablero avisan solos qué proyectos ya vencieron o están por vencer (en los próximos 7 días), calculado con la fecha de fin real — no depende de que alguien cambie el estado a mano. Los proyectos Cumplidos o Cancelados no generan alerta.
 - Comentarios / bitácora por proyecto: dentro de cada proyecto (modo editar) hay una sección para que el equipo deje comentarios con su nombre y fecha, y para borrarlos. Necesita la tabla `proyecto_comentarios` en Supabase (ver instrucciones abajo); si todavía no existe, la app lo indica y el resto sigue funcionando normal.
 - Roles y permisos propios de esta página (Administrador / Editor / Solo lectura) — ver sección "Menú lateral" abajo.
-- Menú lateral con Usuarios, Accesos, Áreas, Países y Responsables (catálogos) además de Proyectos — ver sección "Menú lateral" abajo.
+- Menú lateral con Usuarios, Accesos, Áreas, Países, Responsables y Carga de trabajo (catálogos e informativas) además de Proyectos — ver sección "Menú lateral" abajo.
 - Agregar proyectos (uno o varios a la vez, mismo formulario tipo pestañas que usas en Hallazgos).
 - Editar y eliminar proyectos.
 - Formulario de proyecto rediseñado (ver secciones más abajo): secciones claras (Datos generales, Asignación, Fechas y estado, Presupuesto y archivos, Descripción), pestaña de **Cronograma** con línea de tiempo (Gantt) y ruta crítica, pestaña de **Riesgos** con matriz de probabilidad × impacto, y comparación de **presupuesto vs. gasto real** con semáforo de salud.
@@ -234,6 +234,12 @@ alter table proyectos add column if not exists gasto_real numeric;
 
 3. Listo. En cuanto subas el `index.html` de este paquete, el campo "Gasto real" y la comparación de presupuesto ya funcionan.
 
+## Carga de trabajo por persona
+
+Cuarta mejora del diagnóstico: en el menú lateral hay un ítem nuevo, **Carga de trabajo**, que junta las tareas del Cronograma de TODOS los proyectos (no solo uno) y las agrupa por responsable. Para cada persona muestra cuántas tareas activas tiene en este momento (sin contar las ya completadas), cuántas de esas están vencidas, en qué proyectos están, y una etiqueta de carga: **Baja** (1-2 tareas activas), **Media** (3-5) o **Alta** (6 o más) — para detectar de un vistazo quién tiene demasiado encima y quién tiene espacio para más trabajo. Las tareas sin responsable asignado se agrupan aparte, como "Sin asignar", para que no se pierdan de vista.
+
+Esta vista **no necesita ninguna tabla ni columna nueva en Supabase** — usa exactamente las mismas tareas del Cronograma que ya se cargan para las alertas y el avance de cada proyecto, solo que agrupadas de otra forma. En cuanto subas el `index.html` de este paquete, "Carga de trabajo" ya funciona.
+
 ## Verificación realizada
 
 Antes de entregarla, probé el archivo con un navegador automatizado (React + Babel compilando sin errores) simulando datos de Supabase, cubriendo: login → agregar/editar/eliminar proyecto → KPIs y lista actualizados; Kanban (arrastrar y soltar entre columnas); alertas de vencimiento; comentarios/bitácora (agregar y borrar); roles y permisos (Administrador ve todo, Editor no puede eliminar, Solo lectura no puede editar); el menú lateral completo (Usuarios, Accesos, Áreas, Países, Responsables, Proyectos), el alta/edición/baja de Áreas y Responsables, que los nuevos valores aparecen de inmediato como opción en el formulario de proyectos, y la descarga en PDF — todo sin errores de consola.
@@ -244,4 +250,6 @@ Después, ya con la línea de tiempo (Gantt) y la ruta crítica, probé con un p
 
 Con el registro de riesgos probé: abrir la pestaña Riesgos y ver los riesgos existentes con su nivel ya calculado; agregar un riesgo nuevo y verlo aparecer con los valores por defecto (Media/Medio); editar un riesgo existente y confirmar que el formulario se llena con sus datos; que un riesgo Alto/Alto salga en nivel "Alto" y dispare el aviso rojo, mientras que uno Media/Medio sale en "Medio" sin disparar el aviso; y que el contador de la pestaña ("Riesgos 3") se actualice al agregar. Todo sin errores de consola.
 
-Con el costo real vs. planeado probé: capturar un gasto real mayor al presupuesto y ver que la barra y la etiqueta salgan en rojo ("Sobre presupuesto") tanto en la pestaña Datos como en la columna nueva de la tabla de Proyectos; que el porcentaje se calcule bien (gasto real ÷ presupuesto); y que la exportación a Excel y PDF incluya el gasto real y la desviación sin errores. Todo sin errores de consola. Los íconos y las llamadas reales a Supabase no se pudieron probar en vivo desde este entorno (no tiene salida a internet), así que la primera prueba real de conexión a datos debe hacerse ya en Vercel, después de correr el SQL de esta sección.
+Con el costo real vs. planeado probé: capturar un gasto real mayor al presupuesto y ver que la barra y la etiqueta salgan en rojo ("Sobre presupuesto") tanto en la pestaña Datos como en la columna nueva de la tabla de Proyectos; que el porcentaje se calcule bien (gasto real ÷ presupuesto); y que la exportación a Excel y PDF incluya el gasto real y la desviación sin errores. Todo sin errores de consola.
+
+Con la carga de trabajo probé, usando tareas de dos proyectos distintos asignadas a las mismas personas: que las tareas se agrupen bien por responsable sumando de todos los proyectos (no solo uno); que el conteo de tareas activas y vencidas salga correcto; que la lista de proyectos por persona se arme bien; que las tareas sin responsable se agrupen aparte como "Sin asignar"; y que la etiqueta de carga (Baja/Media/Alta) coincida con los umbrales esperados. Todo sin errores de consola. Los íconos y las llamadas reales a Supabase no se pudieron probar en vivo desde este entorno (no tiene salida a internet), así que la primera prueba real de conexión a datos debe hacerse ya en Vercel.
