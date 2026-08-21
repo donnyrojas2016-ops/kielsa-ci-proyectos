@@ -114,6 +114,37 @@ function nivelCarga(activas) {
   return "Alta";
 }
 
+/* ---------- Registro de cambios ---------- */
+// Campos del proyecto que se vigilan para el historial de cambios. Cuando alguno
+// de estos cambia al guardar, se registra automáticamente quién lo cambió, cuándo,
+// y cuál era el valor antes y después — sin que la persona tenga que hacer nada extra.
+function nombrePaisPorId(paises, id) {
+  if (!id) return "";
+  const p = (paises || []).find(x => x.id === parseInt(id));
+  return p ? p.nombre : "";
+}
+const CAMBIOS_CAMPOS = [
+  { key:"nombre", label:"Nombre" },
+  { key:"categoria", label:"Categoría" },
+  { key:"prioridad", label:"Prioridad", formato: v => v==1 ? "Alta" : v==2 ? "Media" : "Normal" },
+  { key:"area", label:"Área" },
+  { key:"pais_id", label:"País", formatoConPaises: (v, paises) => nombrePaisPorId(paises, v) },
+  { key:"responsable", label:"Responsable" },
+  { key:"estado", label:"Estado" },
+  { key:"fecha_solicitud", label:"Fecha de solicitud" },
+  { key:"fecha_inicio", label:"Fecha de inicio" },
+  { key:"fecha_fin", label:"Vencimiento" },
+  { key:"presupuesto", label:"Presupuesto", formato: v => "$"+(parseFloat(v)||0).toLocaleString("es-HN") },
+  { key:"gasto_real", label:"Gasto real", formato: v => "$"+(parseFloat(v)||0).toLocaleString("es-HN") },
+  { key:"ticket", label:"Ticket" }
+];
+function formatValorCambio(campo, valor, paises) {
+  if (valor === null || valor === undefined || valor === "") return "—";
+  if (campo.formatoConPaises) return campo.formatoConPaises(valor, paises) || "—";
+  if (campo.formato) return campo.formato(valor);
+  return String(valor);
+}
+
 // % de avance de una tarea individual: usa la columna nueva "porcentaje_avance" si existe;
 // si la tarea es de antes de tener Cronograma, se deriva del check "completada" (100 o 0).
 function avanceTarea(t) {
@@ -588,6 +619,11 @@ function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, respon
   const [riesgosDisponibles, setRiesgosDisponibles] = useState(true);
   const [riesgoForm, setRiesgoForm] = useState(null); // null | {mode:"add"} | {mode:"edit", riesgo}
 
+  // ---- Registro de cambios del proyecto (solo lectura, se llena solo al guardar) ----
+  const [cambiosProyecto, setCambiosProyecto] = useState([]);
+  const [cargandoCambios, setCargandoCambios] = useState(false);
+  const [cambiosDisponibles, setCambiosDisponibles] = useState(true);
+
   // ---- Comentarios / bitácora del proyecto (solo aplica en modo edición) ----
   const [comentarios, setComentarios] = useState([]);
   const [cargandoComentarios, setCargandoComentarios] = useState(false);
@@ -697,6 +733,54 @@ function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, respon
   useEffect(() => {
     if (!editProject) return;
     (async () => {
+      setCargandoCambios(true);
+      try {
+        const { data, error } = await supabase.from("proyecto_cambios").select("*").eq("proyectoId", editProject.id).order("id", { ascending: false });
+        if (error) throw error;
+        setCambiosProyecto(data || []);
+        setCambiosDisponibles(true);
+      } catch (e) {
+        console.warn("Tabla proyecto_cambios no disponible:", e.message || e);
+        setCambiosDisponibles(false);
+      } finally {
+        setCargandoCambios(false);
+      }
+    })();
+  }, [editProject]);
+
+  // Compara el proyecto antes y después de guardar, y registra en proyecto_cambios
+  // cada campo vigilado que haya cambiado. Se llama después de un guardado exitoso;
+  // si la tabla todavía no existe, falla en silencio y no bloquea el guardado del proyecto.
+  const registrarCambios = async (anterior, nuevo) => {
+    if (!anterior) return;
+    try {
+      const filas = [];
+      CAMBIOS_CAMPOS.forEach(campo => {
+        const antes = anterior[campo.key];
+        const despues = nuevo[campo.key];
+        const antesStr = (antes === null || antes === undefined) ? "" : String(antes);
+        const despuesStr = (despues === null || despues === undefined) ? "" : String(despues);
+        if (antesStr === despuesStr) return;
+        filas.push({
+          proyectoId: editProject.id,
+          campo: campo.label,
+          valor_anterior: formatValorCambio(campo, antes, paises),
+          valor_nuevo: formatValorCambio(campo, despues, paises),
+          usuario: (session && session.nombre) || "Usuario"
+        });
+      });
+      if (filas.length === 0) return;
+      const { data, error } = await supabase.from("proyecto_cambios").insert(filas).select();
+      if (error) throw error;
+      setCambiosProyecto(list => [...(data || []), ...list]);
+    } catch (e) {
+      console.warn("No se pudo registrar el cambio (falta la tabla proyecto_cambios):", e.message || e);
+    }
+  };
+
+  useEffect(() => {
+    if (!editProject) return;
+    (async () => {
       setCargandoComentarios(true);
       try {
         const { data, error } = await supabase.from("proyecto_comentarios").select("*").eq("proyectoId", editProject.id).order("id");
@@ -772,8 +856,10 @@ function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, respon
         const d = drafts[0];
         if (!d.nombre.trim()) { alert("El nombre del proyecto es obligatorio"); return; }
         setSaving(true);
-        const { error } = await supabase.from("proyectos").update(normalize(d)).eq("id", editProject.id);
+        const payload = normalize(d);
+        const { error } = await supabase.from("proyectos").update(payload).eq("id", editProject.id);
         if (error) throw error;
+        await registrarCambios(editProject, payload);
       } else {
         const rows = drafts.filter(d => d.nombre.trim()).map(normalize);
         if (!rows.length) { alert("Agrega al menos un proyecto con nombre"); return; }
@@ -838,7 +924,8 @@ function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, respon
               { key:"datos", label:"Datos del proyecto", icon:"ti-file-text" },
               { key:"cronograma", label:"Cronograma", icon:"ti-calendar-stats", count: tareasProyecto.length },
               { key:"riesgos", label:"Riesgos", icon:"ti-alert-triangle", count: riesgosProyecto.length },
-              { key:"comentarios", label:"Comentarios", icon:"ti-message-circle", count: comentarios.length }
+              { key:"comentarios", label:"Comentarios", icon:"ti-message-circle", count: comentarios.length },
+              { key:"cambios", label:"Historial de cambios", icon:"ti-history", count: cambiosProyecto.length }
             ].map(t => (
               <div key={t.key} onClick={() => setTab(t.key)} style={{
                 padding:"0.7rem 0.1rem",cursor:"pointer",fontSize:13,fontWeight:700,
@@ -1217,6 +1304,41 @@ function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, respon
                   <Btn sm primary disabled={enviandoComentario || !nuevoComentario.trim()} onClick={agregarComentario}><i className="ti ti-send"/> Enviar</Btn>
                 </div>
               </React.Fragment>
+            )}
+          </React.Fragment>
+        )}
+
+        {editProject && tab === "cambios" && (
+          <React.Fragment>
+            {!cambiosDisponibles ? (
+              <div style={{fontSize:12,color:y.text3}}>Esta función todavía no está activada en la base de datos (falta crear la tabla "proyecto_cambios" — ver README).</div>
+            ) : cargandoCambios ? (
+              <div style={{fontSize:12,color:y.text3}}>Cargando historial...</div>
+            ) : cambiosProyecto.length === 0 ? (
+              <div style={{fontSize:12,color:y.text3,padding:"1rem 0"}}>Sin cambios registrados todavía. En cuanto guardes una modificación a código, categoría, prioridad, área, país, responsable, estado, fechas, presupuesto, gasto real o ticket, aparecerá aquí automáticamente.</div>
+            ) : (
+              <div style={{overflowX:"auto"}}>
+                <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+                  <thead>
+                    <tr style={{background:y.grayBg}}>
+                      {["Fecha","Usuario","Campo","Antes","Después"].map(h => (
+                        <th key={h} style={{textAlign:"left",fontSize:10,fontWeight:800,color:y.text3,textTransform:"uppercase",letterSpacing:.3,padding:"0.5rem 0.5rem",borderBottom:"1px solid "+y.border,whiteSpace:"nowrap"}}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {cambiosProyecto.map(c => (
+                      <tr key={c.id} style={{borderBottom:"1px solid "+y.grayBg}}>
+                        <td style={{padding:"0.5rem",color:y.text3,whiteSpace:"nowrap",fontSize:11}}>{formatearFecha(c.createdAt)}</td>
+                        <td style={{padding:"0.5rem",color:y.text2,whiteSpace:"nowrap"}}>{c.usuario || "—"}</td>
+                        <td style={{padding:"0.5rem",fontWeight:700,color:y.text,whiteSpace:"nowrap"}}>{c.campo}</td>
+                        <td style={{padding:"0.5rem",color:y.danger,maxWidth:220,textDecoration:"line-through",opacity:.75}}>{c.valor_anterior}</td>
+                        <td style={{padding:"0.5rem",color:y.success,maxWidth:220,fontWeight:600}}>{c.valor_nuevo}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </React.Fragment>
         )}
