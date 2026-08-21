@@ -71,6 +71,35 @@ const TAREA_ESTADO_COLOR = {
   "Vencida": [y.dangerBg, y.danger]
 };
 
+/* ---------- Registro de riesgos ---------- */
+const RIESGO_PROBABILIDADES = ["Baja","Media","Alta"];
+const RIESGO_IMPACTOS = ["Bajo","Medio","Alto"];
+const RIESGO_ESTADOS = ["Abierto","Mitigado","Cerrado","Ocurrió"];
+const RIESGO_ESTADO_COLOR = {
+  "Abierto": [y.dangerBg, y.danger],
+  "Mitigado": [y.warningBg, y.warning],
+  "Cerrado": [y.successBg, y.success],
+  "Ocurrió": [y.grayBg, y.gray]
+};
+const RIESGO_PROB_VAL = { "Baja":1, "Media":2, "Alta":3 };
+const RIESGO_IMPACTO_VAL = { "Bajo":1, "Medio":2, "Alto":3 };
+
+// Nivel de un riesgo (matriz clásica probabilidad × impacto, 1 a 9):
+// 1-2 Bajo, 3-4 Medio, 6-9 Alto. Es la forma estándar de priorizar riesgos
+// sin tener que discutir cada caso a mano.
+function nivelRiesgo(probabilidad, impacto) {
+  const p = RIESGO_PROB_VAL[probabilidad] || 1;
+  const im = RIESGO_IMPACTO_VAL[impacto] || 1;
+  const score = p * im;
+  const nivel = score <= 2 ? "Bajo" : score <= 4 ? "Medio" : "Alto";
+  return { score, nivel };
+}
+const RIESGO_NIVEL_COLOR = {
+  "Bajo": [y.successBg, y.success],
+  "Medio": [y.warningBg, y.warning],
+  "Alto": [y.dangerBg, y.danger]
+};
+
 // % de avance de una tarea individual: usa la columna nueva "porcentaje_avance" si existe;
 // si la tarea es de antes de tener Cronograma, se deriva del check "completada" (100 o 0).
 function avanceTarea(t) {
@@ -439,17 +468,94 @@ function TareaForm({ tarea, tareasProyecto, responsables, responsablesDisponible
   );
 }
 
+/* ---------- Formulario de un riesgo del proyecto (agregar o editar) ---------- */
+function RiesgoForm({ riesgo, responsables, responsablesDisponibles, onGuardar, onCancelar }) {
+  const [nombre, setNombre] = useState(riesgo ? riesgo.nombre || "" : "");
+  const [probabilidad, setProbabilidad] = useState(riesgo ? riesgo.probabilidad || "Media" : "Media");
+  const [impacto, setImpacto] = useState(riesgo ? riesgo.impacto || "Medio" : "Medio");
+  const [responsable, setResponsable] = useState(riesgo ? riesgo.responsable || "" : "");
+  const [mitigacion, setMitigacion] = useState(riesgo ? riesgo.mitigacion || "" : "");
+  const [estado, setEstado] = useState(riesgo ? riesgo.estado || "Abierto" : "Abierto");
+
+  const guardar = () => {
+    if (!nombre.trim()) { alert("La descripción del riesgo es obligatoria."); return; }
+    onGuardar({
+      nombre: nombre.trim(),
+      probabilidad,
+      impacto,
+      responsable: responsable || null,
+      mitigacion: mitigacion.trim() || null,
+      estado
+    });
+  };
+
+  return (
+    <div style={{background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:10,padding:"0.9rem 1rem",marginBottom:12}}>
+      <div style={{marginBottom:10}}>
+        <label style={{...labelStyle,color:"#c2410c"}}>Riesgo *</label>
+        <input autoFocus value={nombre} onChange={e => setNombre(e.target.value)} placeholder="Ej: El proveedor podría no entregar el ambiente de pruebas a tiempo" style={{...inputStyle,fontSize:12.5}} />
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:10}}>
+        <div>
+          <label style={{...labelStyle,color:"#c2410c"}}>Probabilidad</label>
+          <select value={probabilidad} onChange={e => setProbabilidad(e.target.value)} style={{...inputStyle,fontSize:12.5}}>
+            {RIESGO_PROBABILIDADES.map(p => <option key={p}>{p}</option>)}
+          </select>
+        </div>
+        <div>
+          <label style={{...labelStyle,color:"#c2410c"}}>Impacto</label>
+          <select value={impacto} onChange={e => setImpacto(e.target.value)} style={{...inputStyle,fontSize:12.5}}>
+            {RIESGO_IMPACTOS.map(im => <option key={im}>{im}</option>)}
+          </select>
+        </div>
+        <div>
+          <label style={{...labelStyle,color:"#c2410c"}}>Estado</label>
+          <select value={estado} onChange={e => setEstado(e.target.value)} style={{...inputStyle,fontSize:12.5}}>
+            {RIESGO_ESTADOS.map(e => <option key={e}>{e}</option>)}
+          </select>
+        </div>
+      </div>
+      <div style={{marginBottom:10}}>
+        <label style={{...labelStyle,color:"#c2410c"}}>Responsable de darle seguimiento</label>
+        {responsablesDisponibles && responsables && responsables.length > 0 ? (
+          <select value={responsable} onChange={e => setResponsable(e.target.value)} style={{...inputStyle,fontSize:12.5}}>
+            <option value="">—</option>
+            {responsable && !responsables.some(r => r.nombre === responsable) && <option value={responsable}>{responsable}</option>}
+            {responsables.map(r => <option key={r.id} value={r.nombre}>{r.nombre}</option>)}
+          </select>
+        ) : (
+          <input value={responsable} onChange={e => setResponsable(e.target.value)} style={{...inputStyle,fontSize:12.5}} />
+        )}
+      </div>
+      <div style={{marginBottom:12}}>
+        <label style={{...labelStyle,color:"#c2410c"}}>Plan de mitigación</label>
+        <textarea value={mitigacion} onChange={e => setMitigacion(e.target.value)} rows={2} placeholder="¿Qué se va a hacer para reducir la probabilidad o el impacto de este riesgo?" style={{...inputStyle,fontSize:12.5,resize:"vertical"}} />
+      </div>
+      <div style={{display:"flex",justifyContent:"flex-end",gap:8}}>
+        <Btn sm onClick={onCancelar}>Cancelar</Btn>
+        <Btn sm primary onClick={guardar}>{riesgo ? "Guardar cambios" : "Agregar riesgo"}</Btn>
+      </div>
+    </div>
+  );
+}
+
 function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, responsables, responsablesDisponibles, editProject, onClose, onSaved, onTareasChanged }) {
   const [drafts, setDrafts] = useState(() => editProject ? [{ ...editProject }] : [nuevoProyecto()]);
   const [active, setActive] = useState(0);
   const [saving, setSaving] = useState(false);
-  const [tab, setTab] = useState("datos"); // datos | cronograma | comentarios (solo aplica en modo edición)
+  const [tab, setTab] = useState("datos"); // datos | cronograma | riesgos | comentarios (solo aplica en modo edición)
 
   // ---- Tareas / Cronograma del proyecto (solo aplica en modo edición, sobre un proyecto ya guardado) ----
   const [tareasProyecto, setTareasProyecto] = useState([]);
   const [cargandoTareas, setCargandoTareas] = useState(false);
   const [tareasDisponibles, setTareasDisponibles] = useState(true);
   const [tareaForm, setTareaForm] = useState(null); // null | {mode:"add"} | {mode:"edit", tarea}
+
+  // ---- Riesgos del proyecto (solo aplica en modo edición) ----
+  const [riesgosProyecto, setRiesgosProyecto] = useState([]);
+  const [cargandoRiesgos, setCargandoRiesgos] = useState(false);
+  const [riesgosDisponibles, setRiesgosDisponibles] = useState(true);
+  const [riesgoForm, setRiesgoForm] = useState(null); // null | {mode:"add"} | {mode:"edit", riesgo}
 
   // ---- Comentarios / bitácora del proyecto (solo aplica en modo edición) ----
   const [comentarios, setComentarios] = useState([]);
@@ -509,6 +615,53 @@ function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, respon
 
   const avancePctTareas = tareasProyecto.length ? Math.round(tareasProyecto.reduce((s,t) => s + avanceTarea(t), 0) / tareasProyecto.length) : 0;
   const rutaCritica = useMemo(() => calcularRutaCritica(tareasProyecto), [tareasProyecto]);
+
+  useEffect(() => {
+    if (!editProject) return;
+    (async () => {
+      setCargandoRiesgos(true);
+      try {
+        const { data, error } = await supabase.from("proyecto_riesgos").select("*").eq("proyectoId", editProject.id).order("id");
+        if (error) throw error;
+        setRiesgosProyecto(data || []);
+        setRiesgosDisponibles(true);
+      } catch (e) {
+        console.warn("Tabla proyecto_riesgos no disponible:", e.message || e);
+        setRiesgosDisponibles(false);
+      } finally {
+        setCargandoRiesgos(false);
+      }
+    })();
+  }, [editProject]);
+
+  const guardarRiesgo = async (payload) => {
+    try {
+      if (riesgoForm && riesgoForm.mode === "edit") {
+        const { error } = await supabase.from("proyecto_riesgos").update(payload).eq("id", riesgoForm.riesgo.id);
+        if (error) throw error;
+        setRiesgosProyecto(list => list.map(r => r.id === riesgoForm.riesgo.id ? { ...r, ...payload } : r));
+      } else {
+        const { data, error } = await supabase.from("proyecto_riesgos").insert({ proyectoId: editProject.id, ...payload }).select();
+        if (error) throw error;
+        setRiesgosProyecto(list => [...list, ...(data || [])]);
+      }
+      setRiesgoForm(null);
+    } catch (e) {
+      alert("No se pudo guardar el riesgo: " + (e.message || e) + (/column|relation/i.test(e.message||"") ? "\n\n(Puede que falte crear la tabla \"proyecto_riesgos\" en Supabase — ver README.)" : ""));
+    }
+  };
+
+  const eliminarRiesgo = async (riesgo) => {
+    if (!window.confirm('¿Eliminar el riesgo "' + riesgo.nombre + '"?')) return;
+    setRiesgosProyecto(list => list.filter(r => r.id !== riesgo.id));
+    try {
+      const { error } = await supabase.from("proyecto_riesgos").delete().eq("id", riesgo.id);
+      if (error) throw error;
+    } catch (e) {
+      alert("No se pudo eliminar el riesgo: " + (e.message || e));
+      setRiesgosProyecto(list => [...list, riesgo]);
+    }
+  };
 
   useEffect(() => {
     if (!editProject) return;
@@ -652,6 +805,7 @@ function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, respon
             {[
               { key:"datos", label:"Datos del proyecto", icon:"ti-file-text" },
               { key:"cronograma", label:"Cronograma", icon:"ti-calendar-stats", count: tareasProyecto.length },
+              { key:"riesgos", label:"Riesgos", icon:"ti-alert-triangle", count: riesgosProyecto.length },
               { key:"comentarios", label:"Comentarios", icon:"ti-message-circle", count: comentarios.length }
             ].map(t => (
               <div key={t.key} onClick={() => setTab(t.key)} style={{
@@ -893,6 +1047,82 @@ function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, respon
                     <i className="ti ti-chart-bar" style={{color:y.primary}}/>
                     Avance general del proyecto (promedio de {tareasProyecto.length} {tareasProyecto.length===1?"tarea":"tareas"}):
                     <strong style={{color:y.primary}}>{avancePctTareas}%</strong>
+                  </div>
+                )}
+              </React.Fragment>
+            )}
+          </React.Fragment>
+        )}
+
+        {editProject && tab === "riesgos" && (
+          <React.Fragment>
+            {!riesgosDisponibles ? (
+              <div style={{fontSize:12,color:y.text3}}>Esta función todavía no está activada en la base de datos (falta crear la tabla "proyecto_riesgos" — ver README).</div>
+            ) : cargandoRiesgos ? (
+              <div style={{fontSize:12,color:y.text3}}>Cargando riesgos...</div>
+            ) : (
+              <React.Fragment>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+                  <span style={{fontSize:12.5,fontWeight:700,color:y.text}}>{riesgosProyecto.length} {riesgosProyecto.length===1?"riesgo":"riesgos"}</span>
+                  {!riesgoForm && <Btn sm primary onClick={() => setRiesgoForm({mode:"add"})}><i className="ti ti-plus"/> Agregar riesgo</Btn>}
+                </div>
+
+                {riesgoForm && (
+                  <RiesgoForm
+                    riesgo={riesgoForm.mode === "edit" ? riesgoForm.riesgo : null}
+                    responsables={responsables}
+                    responsablesDisponibles={responsablesDisponibles}
+                    onGuardar={guardarRiesgo}
+                    onCancelar={() => setRiesgoForm(null)}
+                  />
+                )}
+
+                {riesgosProyecto.length === 0 ? (
+                  <div style={{fontSize:12,color:y.text3,padding:"1rem 0"}}>Sin riesgos identificados todavía — agrega el primero con el botón de arriba.</div>
+                ) : (
+                  <div style={{overflowX:"auto"}}>
+                    <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+                      <thead>
+                        <tr style={{background:y.grayBg}}>
+                          {["Riesgo","Probabilidad","Impacto","Nivel","Responsable","Mitigación","Estado",""].map(h => (
+                            <th key={h} style={{textAlign:"left",fontSize:10,fontWeight:800,color:y.text3,textTransform:"uppercase",letterSpacing:.3,padding:"0.5rem 0.5rem",borderBottom:"1px solid "+y.border,whiteSpace:"nowrap"}}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {riesgosProyecto.map(r => {
+                          const { nivel } = nivelRiesgo(r.probabilidad, r.impacto);
+                          const [nivelBg, nivelColor] = RIESGO_NIVEL_COLOR[nivel] || [y.grayBg, y.gray];
+                          const [estBg, estColor] = RIESGO_ESTADO_COLOR[r.estado] || [y.grayBg, y.gray];
+                          return (
+                            <tr key={r.id} style={{borderBottom:"1px solid "+y.grayBg}}>
+                              <td style={{padding:"0.5rem",color:y.text,maxWidth:220}}>{r.nombre}</td>
+                              <td style={{padding:"0.5rem",color:y.text2,whiteSpace:"nowrap"}}>{r.probabilidad || "—"}</td>
+                              <td style={{padding:"0.5rem",color:y.text2,whiteSpace:"nowrap"}}>{r.impacto || "—"}</td>
+                              <td style={{padding:"0.5rem"}}>
+                                <span style={{display:"inline-flex",padding:"3px 9px",borderRadius:20,fontSize:10.5,fontWeight:700,background:nivelBg,color:nivelColor,whiteSpace:"nowrap"}}>{nivel}</span>
+                              </td>
+                              <td style={{padding:"0.5rem",color:y.text2,whiteSpace:"nowrap"}}>{r.responsable || "—"}</td>
+                              <td style={{padding:"0.5rem",color:y.text3,maxWidth:200,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={r.mitigacion || ""}>{r.mitigacion || "—"}</td>
+                              <td style={{padding:"0.5rem"}}>
+                                <span style={{display:"inline-flex",padding:"3px 9px",borderRadius:20,fontSize:10.5,fontWeight:700,background:estBg,color:estColor,whiteSpace:"nowrap"}}>{r.estado || "Abierto"}</span>
+                              </td>
+                              <td style={{padding:"0.5rem",textAlign:"right",whiteSpace:"nowrap"}}>
+                                <button onClick={() => setRiesgoForm({mode:"edit", riesgo:r})} style={{background:"none",border:"none",color:y.text3,cursor:"pointer",padding:3}} title="Editar"><i className="ti ti-pencil" style={{fontSize:13}}/></button>
+                                <button onClick={() => eliminarRiesgo(r)} style={{background:"none",border:"none",color:y.text3,cursor:"pointer",padding:3}} title="Eliminar"><i className="ti ti-trash" style={{fontSize:13}}/></button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {riesgosProyecto.length > 0 && riesgosProyecto.some(r => nivelRiesgo(r.probabilidad, r.impacto).nivel === "Alto" && r.estado === "Abierto") && (
+                  <div style={{background:y.dangerBg,borderRadius:10,padding:"0.75rem 1rem",marginTop:14,display:"flex",alignItems:"center",gap:12,fontSize:12.5,color:y.danger}}>
+                    <i className="ti ti-alert-triangle"/>
+                    Este proyecto tiene riesgos de nivel <strong>Alto</strong> todavía abiertos — revisa su plan de mitigación.
                   </div>
                 )}
               </React.Fragment>
