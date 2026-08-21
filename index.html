@@ -99,6 +99,55 @@ function duracionDias(inicio, entrega) {
   return Math.round((b - a) / 86400000);
 }
 
+// Rango de fechas (mín. inicio, máx. entrega) entre las tareas que sí tienen ambas fechas.
+// Sirve para dibujar la línea de tiempo del Cronograma.
+function rangoFechasTareas(tareas) {
+  let min = null, max = null;
+  tareas.forEach(t => {
+    if (!t.fecha_inicio || !t.fecha_entrega) return;
+    const a = new Date(t.fecha_inicio + "T00:00:00");
+    const b = new Date(t.fecha_entrega + "T00:00:00");
+    if (isNaN(a.getTime()) || isNaN(b.getTime())) return;
+    if (!min || a < min) min = a;
+    if (!max || b > max) max = b;
+  });
+  return { min, max };
+}
+
+// Ruta crítica: como cada tarea solo puede depender de UNA tarea anterior, la estructura de
+// dependencias es un "bosque" (cada tarea tiene 0 o 1 padre, pero puede tener varias tareas
+// que dependan de ella). La ruta crítica es la cadena de tareas dependientes entre sí que
+// termina en la fecha de entrega más tardía del proyecto — es decir, la cadena que marca
+// la fecha de fin real del proyecto: si cualquier tarea de esa cadena se atrasa, se
+// atrasa el proyecto completo. Devuelve un Set con los id de las tareas en esa ruta.
+function calcularRutaCritica(tareas) {
+  const critico = new Set();
+  const conFecha = tareas.filter(t => t.fecha_entrega);
+  if (conFecha.length === 0) return critico;
+  let maxFin = null;
+  conFecha.forEach(t => {
+    const f = new Date(t.fecha_entrega + "T00:00:00");
+    if (!isNaN(f.getTime()) && (!maxFin || f > maxFin)) maxFin = f;
+  });
+  if (!maxFin) return critico;
+  const porId = {};
+  tareas.forEach(t => { porId[t.id] = t; });
+  // Desde cada tarea "hoja" cuya entrega coincide con la fecha máxima, camina hacia atrás
+  // (tarea → su predecesora → la predecesora de esa...) marcando toda la cadena.
+  conFecha.forEach(t => {
+    const f = new Date(t.fecha_entrega + "T00:00:00");
+    if (isNaN(f.getTime()) || f.getTime() !== maxFin.getTime()) return;
+    let actual = t;
+    let vueltas = 0;
+    while (actual && !critico.has(actual.id) && vueltas < tareas.length + 1) {
+      critico.add(actual.id);
+      actual = actual.depende_id ? porId[actual.depende_id] : null;
+      vueltas++;
+    }
+  });
+  return critico;
+}
+
 // Si el proyecto tiene tareas (Cronograma), el avance se calcula solo: promedio del % de avance de cada tarea.
 // Si no tiene tareas todavía, se usa el % que la persona escribió a mano (compatibilidad con proyectos existentes).
 function avanceEfectivo(proyecto, tareasDelProyecto) {
@@ -239,6 +288,65 @@ function SectionTitle({ children, first }) {
     <div style={{fontSize:11,fontWeight:800,color:y.primary,textTransform:"uppercase",letterSpacing:.4,marginTop:first?0:18,marginBottom:10,display:"flex",alignItems:"center",gap:10}}>
       <span style={{whiteSpace:"nowrap"}}>{children}</span>
       <span style={{flex:1,height:1,background:y.border}}/>
+    </div>
+  );
+}
+
+/* ---------- Línea de tiempo (Gantt) del Cronograma, con ruta crítica resaltada ---------- */
+const MESES_CORTOS = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
+function GanttChart({ tareas, criticalSet }) {
+  const { min, max } = rangoFechasTareas(tareas);
+  if (!min || !max) {
+    return <div style={{fontSize:12,color:y.text3,padding:"0.75rem 0 1rem"}}>Agrega fecha de inicio y de entrega a las tareas para ver la línea de tiempo.</div>;
+  }
+  const spanMs = Math.max(max - min, 86400000);
+  const formatoCorto = d => d.getDate() + " " + MESES_CORTOS[d.getMonth()];
+  const marcas = [0, 1/3, 2/3, 1].map(f => new Date(min.getTime() + spanMs * f));
+  const ANCHO_LABEL = 190;
+
+  return (
+    <div style={{border:"1px solid "+y.border,borderRadius:10,padding:"0.9rem 1rem 0.7rem",marginBottom:14,background:y.surface}}>
+      <div style={{display:"flex",justifyContent:"space-between",fontSize:10.5,fontWeight:700,color:y.text3,marginBottom:8,paddingLeft:ANCHO_LABEL}}>
+        {marcas.map((d,i) => <span key={i}>{formatoCorto(d)}</span>)}
+      </div>
+      {tareas.map((t,i) => {
+        const est = estatusEfectivoTarea(t);
+        const [,estColor] = TAREA_ESTADO_COLOR[est] || [y.grayBg, y.gray];
+        const critica = criticalSet && criticalSet.has(t.id);
+        const tieneFechas = !!(t.fecha_inicio && t.fecha_entrega);
+        let left = 0, width = 0;
+        if (tieneFechas) {
+          const a = new Date(t.fecha_inicio + "T00:00:00");
+          const b = new Date(t.fecha_entrega + "T00:00:00");
+          if (!isNaN(a.getTime()) && !isNaN(b.getTime())) {
+            left = ((a - min) / spanMs) * 100;
+            width = Math.max(((b - a) / spanMs) * 100, 1.2);
+          }
+        }
+        const pct = avanceTarea(t);
+        return (
+          <div key={t.id} style={{display:"flex",alignItems:"center",gap:10,marginBottom:7}}>
+            <div style={{width:ANCHO_LABEL,flexShrink:0,fontSize:11.5,color:y.text2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",display:"flex",alignItems:"center",gap:4}} title={t.titulo}>
+              {critica && <i className="ti ti-alert-triangle" style={{color:y.danger,fontSize:12,flexShrink:0}} title="Ruta crítica"/>}
+              <span style={{fontWeight:700,color:y.text3}}>{i+1}.</span> {t.titulo}
+            </div>
+            <div style={{flex:1,position:"relative",height:20,background:y.grayBg,borderRadius:5}}>
+              {tieneFechas ? (
+                <div style={{position:"absolute",top:0,bottom:0,left:left+"%",width:width+"%",borderRadius:5,background: critica ? y.danger : estColor,opacity: critica ? 1 : 0.85,overflow:"hidden"}}>
+                  <div style={{position:"absolute",left:0,top:0,bottom:0,width:pct+"%",background:"rgba(255,255,255,.35)"}}/>
+                </div>
+              ) : (
+                <div style={{fontSize:10,color:y.text3,lineHeight:"20px",paddingLeft:6}}>Sin fechas</div>
+              )}
+            </div>
+          </div>
+        );
+      })}
+      {criticalSet && criticalSet.size > 0 && (
+        <div style={{display:"flex",alignItems:"center",gap:5,fontSize:10.5,color:y.text3,marginTop:8,paddingLeft:ANCHO_LABEL}}>
+          <i className="ti ti-alert-triangle" style={{color:y.danger,fontSize:12}}/> Ruta crítica — si se atrasa cualquiera de estas tareas, se atrasa el proyecto
+        </div>
+      )}
     </div>
   );
 }
@@ -400,6 +508,7 @@ function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, respon
   };
 
   const avancePctTareas = tareasProyecto.length ? Math.round(tareasProyecto.reduce((s,t) => s + avanceTarea(t), 0) / tareasProyecto.length) : 0;
+  const rutaCritica = useMemo(() => calcularRutaCritica(tareasProyecto), [tareasProyecto]);
 
   useEffect(() => {
     if (!editProject) return;
@@ -726,6 +835,8 @@ function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, respon
                 {tareasProyecto.length === 0 ? (
                   <div style={{fontSize:12,color:y.text3,padding:"1rem 0"}}>Sin tareas todavía — agrega la primera con el botón de arriba.</div>
                 ) : (
+                  <React.Fragment>
+                  <GanttChart tareas={tareasProyecto} criticalSet={rutaCritica} />
                   <div style={{overflowX:"auto"}}>
                     <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
                       <thead>
@@ -742,10 +853,14 @@ function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, respon
                           const dias = duracionDias(t.fecha_inicio, t.fecha_entrega);
                           const dep = t.depende_id ? tareasProyecto.findIndex(x => x.id === t.depende_id) : -1;
                           const pct = avanceTarea(t);
+                          const critica = rutaCritica.has(t.id);
                           return (
                             <tr key={t.id} style={{borderBottom:"1px solid "+y.grayBg}}>
                               <td style={{padding:"0.5rem",fontWeight:800,color:y.text3,fontSize:11}}>{i+1}</td>
-                              <td style={{padding:"0.5rem",color:y.text,maxWidth:220}}>{t.titulo}</td>
+                              <td style={{padding:"0.5rem",color:y.text,maxWidth:220}}>
+                                {critica && <i className="ti ti-alert-triangle" style={{color:y.danger,fontSize:12,marginRight:5}} title="Ruta crítica"/>}
+                                {t.titulo}
+                              </td>
                               <td style={{padding:"0.5rem",color:y.text2,whiteSpace:"nowrap"}}>{t.responsable || "—"}</td>
                               <td style={{padding:"0.5rem",color:y.text3,whiteSpace:"nowrap"}}>{dep >= 0 ? "EDT " + (dep+1) : "—"}</td>
                               <td style={{padding:"0.5rem",color:y.text2,whiteSpace:"nowrap"}}>{t.fecha_inicio || "—"}</td>
@@ -770,6 +885,7 @@ function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, respon
                       </tbody>
                     </table>
                   </div>
+                  </React.Fragment>
                 )}
 
                 {tareasProyecto.length > 0 && (
