@@ -18,7 +18,11 @@ También puedes arrastrar la carpeta directamente en Vercel o usar `vercel deplo
 
 Usa el mismo usuario y contraseña que ya usas para entrar a Kielsa CI (se valida contra la tabla `usuarios` de la misma base de datos). No es necesario crear usuarios nuevos.
 
-**Nota de seguridad:** al igual que en la app principal, la validación de usuario/clave se hace hoy comparando el texto en el navegador (no hay cifrado de contraseñas ni verificación en el servidor). Esto ya lo señalé en la revisión general que te envié — si más adelante quieres que lo blindemos (contraseñas cifradas + verificación en servidor), lo hacemos como una tarea aparte.
+**Nota de seguridad:** al igual que en la app principal, la validación de usuario/clave se hace hoy comparando el texto en el navegador (no hay cifrado de contraseñas ni verificación en el servidor). Esto ya lo señalé en la revisión general que te envié.
+
+Ya hice una primera mejora sobre esto (ver "Endurecimiento del login" más abajo): antes, con solo abrir la pantalla de inicio de sesión (sin siquiera escribir nada), la app pedía la lista completa de usuarios con su contraseña en texto — es decir, cualquiera que abriera las herramientas del navegador podía ver la contraseña de todo el mundo, no solo la suya, aunque nunca llegara a entrar. Ahora solo se pide el usuario que se está escribiendo, así que por la red ya no viaja la contraseña de nadie más.
+
+Cifrar la contraseña de verdad (que se guarde y compare como hash, no en texto) es un cambio más grande que no pude hacer "solo en esta página": la tabla `usuarios` es la misma que usa la app principal de Kielsa CI, así que si cambio el formato de la contraseña aquí, la app principal también tendría que saber leerlo o la gente se quedaría sin poder entrar ahí — y esa app no está en este espacio de trabajo para revisarla. Si más adelante quieres hacerlo, lo ideal es coordinarlo con quien mantiene la app principal para actualizar las dos a la vez.
 
 ## Qué incluye
 
@@ -32,7 +36,7 @@ Usa el mismo usuario y contraseña que ya usas para entrar a Kielsa CI (se valid
 - Menú lateral con Usuarios, Accesos, Áreas, Países, Responsables y Carga de trabajo (catálogos e informativas) además de Proyectos — ver sección "Menú lateral" abajo.
 - Agregar proyectos (uno o varios a la vez, mismo formulario tipo pestañas que usas en Hallazgos).
 - Editar y eliminar proyectos.
-- Formulario de proyecto rediseñado (ver secciones más abajo): secciones claras (Datos generales, Asignación, Fechas y estado, Presupuesto y archivos, Descripción), pestaña de **Cronograma** con línea de tiempo (Gantt), ruta crítica y **matriz RACI** por tarea, pestaña de **Riesgos** con matriz de probabilidad × impacto, comparación de **presupuesto vs. gasto real** con semáforo de salud, vista de **Carga de trabajo** por persona, y pestaña de **Historial de cambios** que registra automáticamente quién cambió qué y cuándo.
+- Formulario de proyecto rediseñado (ver secciones más abajo): secciones claras (Datos generales, Asignación, Fechas y estado, Presupuesto y archivos, Descripción), pestaña de **Cronograma** con línea de tiempo (Gantt), ruta crítica y **matriz RACI** por tarea, pestaña de **Riesgos** con matriz de probabilidad × impacto, comparación de **presupuesto vs. gasto real** con semáforo de salud y panel de **Valor Ganado (EVM)** con CPI/SPI, vista de **Carga de trabajo** por persona, y pestaña de **Historial de cambios** que registra automáticamente quién cambió qué y cuándo.
 - Exportar a Excel y a PDF la lista filtrada (incluye la columna Presupuesto).
 
 ## Activar los comentarios (una sola vez en Supabase)
@@ -290,6 +294,32 @@ alter table proyecto_tareas add column if not exists informados text;
 
 3. Listo. En cuanto subas el `index.html` de este paquete, el formulario de tareas ya muestra los campos de Aprobador/Consultados/Informados, y el botón "Ver matriz RACI" ya funciona.
 
+## Valor Ganado (EVM)
+
+Séptima mejora, ya fuera del diagnóstico original: con presupuesto, gasto real, fechas y % de avance ya capturados, agregamos el cálculo clásico de **Valor Ganado** (Earned Value Management), el estándar más usado en PMBOK para saber de un vistazo si un proyecto va bien en plata y en tiempo al mismo tiempo — algo que "Costo real vs. planeado" por sí solo no alcanza a mostrar, porque no dice si ese gasto va al ritmo correcto según cuánto tiempo ha pasado.
+
+Debajo de la comparación de presupuesto (en la pestaña "Datos del proyecto", siempre que el proyecto tenga presupuesto, fecha de inicio y vencimiento capturados) aparece un panel nuevo con:
+
+- **PV — Valor planeado**: cuánto presupuesto "debería" llevarse gastado según el tiempo transcurrido entre el inicio y el vencimiento planeados.
+- **EV — Valor ganado**: presupuesto × % de avance real del proyecto (del Cronograma si tiene tareas, si no del campo % avance).
+- **AC — Costo real**: el gasto real que ya capturas.
+- **CPI** (índice de desempeño de costo) = EV ÷ AC, con la variación de costo (CV = EV − AC) debajo.
+- **SPI** (índice de desempeño de cronograma) = EV ÷ PV, con la variación de cronograma (SV = EV − PV) debajo.
+
+Ambos índices se pintan en verde (1.00 o más, va bien), amarillo (0.90–0.99, alerta) o rojo (menos de 0.90, fuera de línea base) — el mismo lenguaje de semáforo que ya usas en el resto de la app. Si el proyecto todavía no tiene gasto real capturado, el CPI se muestra como "—" en vez de un número engañoso (no se puede calcular sin un gasto contra qué comparar), pero el SPI sigue calculándose porque solo depende de fechas y avance.
+
+**Nota sobre el cálculo de PV:** como la app no maneja un presupuesto repartido tarea por tarea con su propia fecha, el Valor Planeado se aproxima de forma lineal (presupuesto × % del tiempo ya transcurrido entre inicio y vencimiento). Es la aproximación estándar cuando no se tiene una línea base detallada por actividad, y mejora sola si más adelante quieres repartir presupuesto por tarea del Cronograma.
+
+### Activar el Valor Ganado
+
+No hace falta ninguna tabla ni columna nueva en Supabase — el cálculo usa exactamente los mismos campos que ya capturas (presupuesto, gasto real, fecha de inicio, vencimiento y avance). En cuanto subas el `index.html` de este paquete, el panel "Valor Ganado (EVM)" ya aparece solo en cualquier proyecto que tenga esos cuatro datos.
+
+## Endurecimiento del login
+
+Mejora de seguridad al login, sin tocar el formato de la contraseña (ver la nota de seguridad más arriba sobre por qué el cifrado completo no se puede hacer solo en esta página). Antes, la pantalla de inicio de sesión pedía la tabla `usuarios` completa — con la contraseña de cada persona en texto — en cuanto alguien cargaba la página, sin importar si llegaba a escribir algo o si el usuario/clave eran correctos. Ahora la consulta se filtra por el usuario que se está escribiendo, así que solo esa una fila viaja por la red; la contraseña del resto de la gente ya no se expone en cada intento de login.
+
+No necesita ningún cambio en Supabase — es solo un ajuste a cómo la app pide los datos. En cuanto subas el `index.html` de este paquete, ya queda activo.
+
 ## Verificación realizada
 
 Antes de entregarla, probé el archivo con un navegador automatizado (React + Babel compilando sin errores) simulando datos de Supabase, cubriendo: login → agregar/editar/eliminar proyecto → KPIs y lista actualizados; Kanban (arrastrar y soltar entre columnas); alertas de vencimiento; comentarios/bitácora (agregar y borrar); roles y permisos (Administrador ve todo, Editor no puede eliminar, Solo lectura no puede editar); el menú lateral completo (Usuarios, Accesos, Áreas, Países, Responsables, Proyectos), el alta/edición/baja de Áreas y Responsables, que los nuevos valores aparecen de inmediato como opción en el formulario de proyectos, y la descarga en PDF — todo sin errores de consola.
@@ -306,4 +336,8 @@ Con la carga de trabajo probé, usando tareas de dos proyectos distintos asignad
 
 Con el registro de cambios probé: abrir la pestaña "Historial de cambios" de un proyecto con un cambio ya registrado y ver la fila con su fecha, usuario, campo, valor anterior tachado y valor nuevo; editar el proyecto cambiando el Estado y el Presupuesto y guardar; reabrir el proyecto y confirmar que las dos filas nuevas aparecen solas en el historial, con el campo correcto ("Estado", "Presupuesto"), el valor anterior real (no el que estaba en el formulario a medio llenar) y el valor nuevo ya formateado (el presupuesto con el signo "$"); y que guardar sin cambiar nada relevante no agregue filas de más. Todo sin errores de consola.
 
-Con la matriz RACI probé: abrir el botón "Ver matriz RACI" de un proyecto con tareas que ya tenían Aprobador/Consultados/Informados capturados y confirmar que la tabla compacta los muestra bien, uno por columna; editar una tarea que no tenía nada de RACI, llenar el Aprobador (de la lista de Responsables), Consultados e Informados (texto libre) y guardar; confirmar que la matriz se actualiza sola, sin recargar, con los valores nuevos en la fila correcta; y, ya con la pestaña cerrada y el proyecto completo guardado, reabrirlo desde cero y confirmar que los datos de RACI siguen ahí (no se perdieron al recargar desde el origen de datos). Todo sin errores de consola. Los íconos y las llamadas reales a Supabase no se pudieron probar en vivo desde este entorno (no tiene salida a internet), así que la primera prueba real de conexión a datos debe hacerse ya en Vercel.
+Con la matriz RACI probé: abrir el botón "Ver matriz RACI" de un proyecto con tareas que ya tenían Aprobador/Consultados/Informados capturados y confirmar que la tabla compacta los muestra bien, uno por columna; editar una tarea que no tenía nada de RACI, llenar el Aprobador (de la lista de Responsables), Consultados e Informados (texto libre) y guardar; confirmar que la matriz se actualiza sola, sin recargar, con los valores nuevos en la fila correcta; y, ya con la pestaña cerrada y el proyecto completo guardado, reabrirlo desde cero y confirmar que los datos de RACI siguen ahí (no se perdieron al recargar desde el origen de datos). Todo sin errores de consola.
+
+Con el Valor Ganado probé dos proyectos con datos muy distintos: uno ya vencido y sobre presupuesto (gasto real mayor al presupuesto, fecha de vencimiento ya pasada) donde el PV sale al 100% del presupuesto, el CPI y el SPI salen ambos por debajo de 0.90 y se pintan en rojo, y la variación de costo (CV) sale negativa; y otro proyecto en curso, sin gasto real capturado todavía, donde el CPI se muestra correctamente como "—" (en vez de un cálculo engañoso con AC en cero) mientras el SPI sí se calcula solo con fechas y avance y sale en rojo por estar atrasado. También confirmé que el panel no aparece si al proyecto le falta presupuesto o alguna de las dos fechas. Todo sin errores de consola.
+
+Con el endurecimiento del login probé: iniciar sesión con usuario y clave correctos (como Administrador y como Editor, dos cuentas distintas) y confirmar que ambas entran normal; escribir una clave incorrecta y confirmar que sigue mostrando el mismo mensaje de error de siempre ("Usuario y clave incorrectas"), sin distinguir si el usuario existe o no (para no dar pistas de más); y confirmar que la consulta a Supabase ahora sí va filtrada por el usuario escrito. Todo sin errores de consola. Los íconos y las llamadas reales a Supabase no se pudieron probar en vivo desde este entorno (no tiene salida a internet), así que la primera prueba real de conexión a datos debe hacerse ya en Vercel.

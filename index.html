@@ -249,6 +249,46 @@ function saludPresupuesto(p) {
   return { pct, nivel, presupuesto, gasto };
 }
 
+// Valor Ganado (EVM — Earned Value Management), el estándar clásico de PMBOK para saber si un
+// proyecto va bien en plata y en tiempo al mismo tiempo, en un solo vistazo. Necesita presupuesto,
+// fecha de inicio y fecha de fin; si falta alguno, devuelve null (no hay línea base para comparar).
+//   PV (Valor Planeado) = qué tanto presupuesto "debería" llevarse gastado según el tiempo
+//     transcurrido entre el inicio y el fin planeados (aproximación lineal, ya que la app no
+//     maneja un presupuesto repartido por tarea/fecha).
+//   EV (Valor Ganado) = presupuesto × % de avance real del proyecto (de tareas si tiene Cronograma,
+//     si no del campo % avance).
+//   AC (Costo Real) = el gasto real capturado.
+//   CV = EV - AC (positivo = bajo presupuesto). SV = EV - PV (positivo = adelantado).
+//   CPI = EV / AC (>1 = cada $ gastado rindió más de $1 de trabajo). SPI = EV / PV (>1 = adelantado).
+function calcularEVM(p, tareasDelProyecto) {
+  const presupuesto = parseFloat(p.presupuesto);
+  if (!presupuesto || isNaN(presupuesto) || presupuesto <= 0) return null;
+  if (!p.fecha_inicio || !p.fecha_fin) return null;
+  const inicio = new Date(p.fecha_inicio + "T00:00:00");
+  const fin = new Date(p.fecha_fin + "T00:00:00");
+  if (isNaN(inicio.getTime()) || isNaN(fin.getTime()) || fin <= inicio) return null;
+  const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+  const duracionTotal = fin - inicio;
+  const transcurrido = Math.min(Math.max(hoy - inicio, 0), duracionTotal);
+  const pctTiempo = transcurrido / duracionTotal;
+  const avance = avanceEfectivo(p, tareasDelProyecto); // 0..1
+  const ac = parseFloat(p.gasto_real) || 0;
+  const pv = presupuesto * pctTiempo;
+  const ev = presupuesto * avance;
+  const cv = ev - ac;
+  const sv = ev - pv;
+  const cpi = ac > 0 ? ev / ac : null;
+  const spi = pv > 0 ? ev / pv : null;
+  return { presupuesto, pv, ev, ac, cv, sv, cpi, spi, pctTiempo, avance };
+}
+const EVM_INDICE_COLOR = { bien: [y.successBg, y.success], riesgo: [y.warningBg, y.warning], mal: [y.dangerBg, y.danger] };
+function nivelIndiceEVM(valor) {
+  if (valor === null || valor === undefined || isNaN(valor)) return null;
+  if (valor >= 1) return "bien";
+  if (valor >= 0.9) return "riesgo";
+  return "mal";
+}
+
 // Calcula si un proyecto está vencido o a punto de vencer según su fecha_fin real,
 // sin depender de que alguien haya cambiado manualmente el campo "estado".
 // Los proyectos ya Cumplidos o Cancelados no generan alerta.
@@ -320,7 +360,11 @@ function Login({ onLogin }) {
   const submit = async () => {
     setLoading(true); setError(false);
     try {
-      const { data, error: err } = await supabase.from("usuarios").select("*");
+      // Antes esto traía TODOS los usuarios (con su contraseña en texto) en una sola llamada,
+      // sin importar quién la hiciera ni si el usuario/clave eran correctos. Filtrar por el
+      // usuario que se está escribiendo hace que solo viaje por la red esa una fila, no la
+      // contraseña de todos los demás.
+      const { data, error: err } = await supabase.from("usuarios").select("*").eq("usuario", usuario);
       if (err) throw err;
       const found = (data || []).find(u => u.usuario === usuario && u.password === password && u.estado === "Activo");
       if (found) {
@@ -1117,6 +1161,51 @@ function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, respon
                     </div>
                   </div>
                   <span style={{display:"inline-flex",padding:"3px 10px",borderRadius:20,fontSize:11,fontWeight:700,background:saludBg,color:saludColor,whiteSpace:"nowrap"}}>{salud.nivel}</span>
+                </div>
+              );
+            })()}
+
+            {(() => {
+              const evm = calcularEVM(current, tareasProyecto);
+              if (!evm) return null;
+              const nivelCosto = nivelIndiceEVM(evm.cpi);
+              const nivelTiempo = nivelIndiceEVM(evm.spi);
+              const money = v => "$" + Math.round(v).toLocaleString("es-HN");
+              const celda = (label, valor, sub) => (
+                <div style={{background:y.surface,border:"1px solid "+y.border,borderRadius:8,padding:"0.55rem 0.7rem"}}>
+                  <div style={{fontSize:9.5,fontWeight:800,color:y.text3,textTransform:"uppercase",letterSpacing:.3,marginBottom:3}}>{label}</div>
+                  <div style={{fontSize:14,fontWeight:800,color:y.text}}>{valor}</div>
+                  {sub && <div style={{fontSize:10,color:y.text3,marginTop:1}}>{sub}</div>}
+                </div>
+              );
+              return (
+                <div style={{background:y.grayBg,border:"1px solid "+y.border,borderRadius:10,padding:"0.8rem 0.9rem",marginBottom:12}}>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+                    <span style={{fontSize:11.5,fontWeight:700,color:y.text}}><i className="ti ti-chart-arrows" style={{fontSize:13,marginRight:4,color:y.primary}}/>Valor Ganado (EVM)</span>
+                    <span style={{fontSize:10,color:y.text3}}>{Math.round(evm.pctTiempo*100)}% del tiempo transcurrido</span>
+                  </div>
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:8}}>
+                    {celda("PV — Valor planeado", money(evm.pv))}
+                    {celda("EV — Valor ganado", money(evm.ev))}
+                    {celda("AC — Costo real", money(evm.ac))}
+                  </div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                    <div style={{background:y.surface,border:"1px solid "+y.border,borderRadius:8,padding:"0.55rem 0.7rem",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                      <div>
+                        <div style={{fontSize:9.5,fontWeight:800,color:y.text3,textTransform:"uppercase",letterSpacing:.3}}>CPI (costo)</div>
+                        <div style={{fontSize:10,color:y.text3}}>CV: {evm.cv>=0?"+":""}{money(evm.cv)}</div>
+                      </div>
+                      <span style={{display:"inline-flex",padding:"3px 10px",borderRadius:20,fontSize:12,fontWeight:800,background: nivelCosto?EVM_INDICE_COLOR[nivelCosto][0]:y.grayBg,color: nivelCosto?EVM_INDICE_COLOR[nivelCosto][1]:y.gray}}>{evm.cpi!=null ? evm.cpi.toFixed(2) : "—"}</span>
+                    </div>
+                    <div style={{background:y.surface,border:"1px solid "+y.border,borderRadius:8,padding:"0.55rem 0.7rem",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                      <div>
+                        <div style={{fontSize:9.5,fontWeight:800,color:y.text3,textTransform:"uppercase",letterSpacing:.3}}>SPI (tiempo)</div>
+                        <div style={{fontSize:10,color:y.text3}}>SV: {evm.sv>=0?"+":""}{money(evm.sv)}</div>
+                      </div>
+                      <span style={{display:"inline-flex",padding:"3px 10px",borderRadius:20,fontSize:12,fontWeight:800,background: nivelTiempo?EVM_INDICE_COLOR[nivelTiempo][0]:y.grayBg,color: nivelTiempo?EVM_INDICE_COLOR[nivelTiempo][1]:y.gray}}>{evm.spi!=null ? evm.spi.toFixed(2) : "—"}</span>
+                    </div>
+                  </div>
+                  <div style={{fontSize:10,color:y.text3,marginTop:8}}>CPI y SPI de 1.00 o más = va bien. Entre 0.90 y 0.99 = alerta. Menos de 0.90 = fuera de línea base.</div>
                 </div>
               );
             })()}
