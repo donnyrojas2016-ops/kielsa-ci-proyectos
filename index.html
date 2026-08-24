@@ -134,8 +134,6 @@ const CAMBIOS_CAMPOS = [
   { key:"fecha_solicitud", label:"Fecha de solicitud" },
   { key:"fecha_inicio", label:"Fecha de inicio" },
   { key:"fecha_fin", label:"Vencimiento" },
-  { key:"presupuesto", label:"Presupuesto", formato: v => "$"+(parseFloat(v)||0).toLocaleString("es-HN") },
-  { key:"gasto_real", label:"Gasto real", formato: v => "$"+(parseFloat(v)||0).toLocaleString("es-HN") },
   { key:"ticket", label:"Ticket" }
 ];
 function formatValorCambio(campo, valor, paises) {
@@ -230,63 +228,6 @@ function avanceEfectivo(proyecto, tareasDelProyecto) {
     return (suma / tareasDelProyecto.length) / 100;
   }
   return parseFloat(proyecto.avance) || 0;
-}
-
-// Salud del presupuesto: compara lo gastado contra lo planeado. Devuelve null si el
-// proyecto todavía no tiene presupuesto o gasto real capturado (no hay nada que comparar).
-// <=90% del presupuesto: En rango. 91-110%: Al límite. >110%: Sobre presupuesto.
-const SALUD_PRESUPUESTO_COLOR = {
-  "En rango": [y.successBg, y.success],
-  "Al límite": [y.warningBg, y.warning],
-  "Sobre presupuesto": [y.dangerBg, y.danger]
-};
-function saludPresupuesto(p) {
-  const presupuesto = parseFloat(p.presupuesto);
-  const gasto = parseFloat(p.gasto_real);
-  if (!presupuesto || isNaN(presupuesto) || presupuesto <= 0 || isNaN(gasto)) return null;
-  const pct = Math.round((gasto / presupuesto) * 100);
-  const nivel = pct <= 90 ? "En rango" : pct <= 110 ? "Al límite" : "Sobre presupuesto";
-  return { pct, nivel, presupuesto, gasto };
-}
-
-// Valor Ganado (EVM — Earned Value Management), el estándar clásico de PMBOK para saber si un
-// proyecto va bien en plata y en tiempo al mismo tiempo, en un solo vistazo. Necesita presupuesto,
-// fecha de inicio y fecha de fin; si falta alguno, devuelve null (no hay línea base para comparar).
-//   PV (Valor Planeado) = qué tanto presupuesto "debería" llevarse gastado según el tiempo
-//     transcurrido entre el inicio y el fin planeados (aproximación lineal, ya que la app no
-//     maneja un presupuesto repartido por tarea/fecha).
-//   EV (Valor Ganado) = presupuesto × % de avance real del proyecto (de tareas si tiene Cronograma,
-//     si no del campo % avance).
-//   AC (Costo Real) = el gasto real capturado.
-//   CV = EV - AC (positivo = bajo presupuesto). SV = EV - PV (positivo = adelantado).
-//   CPI = EV / AC (>1 = cada $ gastado rindió más de $1 de trabajo). SPI = EV / PV (>1 = adelantado).
-function calcularEVM(p, tareasDelProyecto) {
-  const presupuesto = parseFloat(p.presupuesto);
-  if (!presupuesto || isNaN(presupuesto) || presupuesto <= 0) return null;
-  if (!p.fecha_inicio || !p.fecha_fin) return null;
-  const inicio = new Date(p.fecha_inicio + "T00:00:00");
-  const fin = new Date(p.fecha_fin + "T00:00:00");
-  if (isNaN(inicio.getTime()) || isNaN(fin.getTime()) || fin <= inicio) return null;
-  const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
-  const duracionTotal = fin - inicio;
-  const transcurrido = Math.min(Math.max(hoy - inicio, 0), duracionTotal);
-  const pctTiempo = transcurrido / duracionTotal;
-  const avance = avanceEfectivo(p, tareasDelProyecto); // 0..1
-  const ac = parseFloat(p.gasto_real) || 0;
-  const pv = presupuesto * pctTiempo;
-  const ev = presupuesto * avance;
-  const cv = ev - ac;
-  const sv = ev - pv;
-  const cpi = ac > 0 ? ev / ac : null;
-  const spi = pv > 0 ? ev / pv : null;
-  return { presupuesto, pv, ev, ac, cv, sv, cpi, spi, pctTiempo, avance };
-}
-const EVM_INDICE_COLOR = { bien: [y.successBg, y.success], riesgo: [y.warningBg, y.warning], mal: [y.dangerBg, y.danger] };
-function nivelIndiceEVM(valor) {
-  if (valor === null || valor === undefined || isNaN(valor)) return null;
-  if (valor >= 1) return "bien";
-  if (valor >= 0.9) return "riesgo";
-  return "mal";
 }
 
 // Calcula si un proyecto está vencido o a punto de vencer según su fecha_fin real,
@@ -415,7 +356,7 @@ const nuevoProyecto = () => ({
   _key: Date.now() + Math.random(),
   codigo:"", categoria:"CI", prioridad:3, nombre:"", area:"", pais_id:"",
   responsable:"", ticket:"", fecha_solicitud:"", fecha_inicio:"", fecha_fin:"", avance:0, estado:"Pendiente",
-  presupuesto:"", gasto_real:"", archivo_nombre:"", observacion:""
+  archivo_nombre:"", observacion:""
 });
 
 function SectionTitle({ children, first }) {
@@ -919,8 +860,6 @@ function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, respon
       pais_id: rest.pais_id ? parseInt(rest.pais_id) : null,
       prioridad: parseInt(rest.prioridad) || 3,
       avance: parseFloat(rest.avance) || 0,
-      presupuesto: rest.presupuesto === "" || rest.presupuesto === null || rest.presupuesto === undefined ? null : parseFloat(String(rest.presupuesto).replace(/,/g,"")) || 0,
-      gasto_real: rest.gasto_real === "" || rest.gasto_real === null || rest.gasto_real === undefined ? null : parseFloat(String(rest.gasto_real).replace(/,/g,"")) || 0,
       actualizado_en: new Date().toISOString(),
       actualizado_por: (session && session.nombre) || "Usuario"
     };
@@ -1119,22 +1058,8 @@ function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, respon
               </div>
             </div>
 
-            <SectionTitle>Presupuesto y archivos</SectionTitle>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:10,marginBottom:10}}>
-              <div>
-                <label style={labelStyle}>Presupuesto (planeado)</label>
-                <div style={{position:"relative"}}>
-                  <span style={{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)",color:y.text3,fontSize:12.5,fontWeight:700,pointerEvents:"none"}}>$</span>
-                  <input value={current.presupuesto ?? ""} onChange={e => updateField(active,"presupuesto",e.target.value)} placeholder="0.00" style={{...inputStyle,fontSize:12.5,paddingLeft:22}} />
-                </div>
-              </div>
-              <div>
-                <label style={labelStyle}>Gasto real</label>
-                <div style={{position:"relative"}}>
-                  <span style={{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)",color:y.text3,fontSize:12.5,fontWeight:700,pointerEvents:"none"}}>$</span>
-                  <input value={current.gasto_real ?? ""} onChange={e => updateField(active,"gasto_real",e.target.value)} placeholder="0.00" style={{...inputStyle,fontSize:12.5,paddingLeft:22}} />
-                </div>
-              </div>
+            <SectionTitle>Ticket y archivo</SectionTitle>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
               <div>
                 <label style={labelStyle}>Ticket</label>
                 <input value={current.ticket} onChange={e => updateField(active,"ticket",e.target.value)} style={{...inputStyle,fontSize:12.5}} />
@@ -1144,71 +1069,6 @@ function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, respon
                 <input value={current.archivo_nombre||""} onChange={e => updateField(active,"archivo_nombre",e.target.value)} placeholder="Nombre o enlace del archivo" style={{...inputStyle,fontSize:12.5}} />
               </div>
             </div>
-
-            {(() => {
-              const salud = saludPresupuesto(current);
-              if (!salud) return null;
-              const [saludBg, saludColor] = SALUD_PRESUPUESTO_COLOR[salud.nivel] || [y.grayBg, y.gray];
-              return (
-                <div style={{background:y.grayBg,border:"1px solid "+y.border,borderRadius:10,padding:"0.7rem 0.9rem",marginBottom:12,display:"flex",alignItems:"center",gap:12}}>
-                  <div style={{flex:1}}>
-                    <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:y.text3,marginBottom:4}}>
-                      <span>Gastado: ${salud.gasto.toLocaleString("es-HN")} de ${salud.presupuesto.toLocaleString("es-HN")}</span>
-                      <span>{salud.pct}%</span>
-                    </div>
-                    <div style={{height:7,borderRadius:20,background:y.border,position:"relative"}}>
-                      <span style={{position:"absolute",left:0,top:0,bottom:0,borderRadius:20,background:saludColor,width:Math.min(salud.pct,100)+"%"}}/>
-                    </div>
-                  </div>
-                  <span style={{display:"inline-flex",padding:"3px 10px",borderRadius:20,fontSize:11,fontWeight:700,background:saludBg,color:saludColor,whiteSpace:"nowrap"}}>{salud.nivel}</span>
-                </div>
-              );
-            })()}
-
-            {(() => {
-              const evm = calcularEVM(current, tareasProyecto);
-              if (!evm) return null;
-              const nivelCosto = nivelIndiceEVM(evm.cpi);
-              const nivelTiempo = nivelIndiceEVM(evm.spi);
-              const money = v => "$" + Math.round(v).toLocaleString("es-HN");
-              const celda = (label, valor, sub) => (
-                <div style={{background:y.surface,border:"1px solid "+y.border,borderRadius:8,padding:"0.55rem 0.7rem"}}>
-                  <div style={{fontSize:9.5,fontWeight:800,color:y.text3,textTransform:"uppercase",letterSpacing:.3,marginBottom:3}}>{label}</div>
-                  <div style={{fontSize:14,fontWeight:800,color:y.text}}>{valor}</div>
-                  {sub && <div style={{fontSize:10,color:y.text3,marginTop:1}}>{sub}</div>}
-                </div>
-              );
-              return (
-                <div style={{background:y.grayBg,border:"1px solid "+y.border,borderRadius:10,padding:"0.8rem 0.9rem",marginBottom:12}}>
-                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
-                    <span style={{fontSize:11.5,fontWeight:700,color:y.text}}><i className="ti ti-chart-arrows" style={{fontSize:13,marginRight:4,color:y.primary}}/>Valor Ganado (EVM)</span>
-                    <span style={{fontSize:10,color:y.text3}}>{Math.round(evm.pctTiempo*100)}% del tiempo transcurrido</span>
-                  </div>
-                  <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:8}}>
-                    {celda("PV — Valor planeado", money(evm.pv))}
-                    {celda("EV — Valor ganado", money(evm.ev))}
-                    {celda("AC — Costo real", money(evm.ac))}
-                  </div>
-                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-                    <div style={{background:y.surface,border:"1px solid "+y.border,borderRadius:8,padding:"0.55rem 0.7rem",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-                      <div>
-                        <div style={{fontSize:9.5,fontWeight:800,color:y.text3,textTransform:"uppercase",letterSpacing:.3}}>CPI (costo)</div>
-                        <div style={{fontSize:10,color:y.text3}}>CV: {evm.cv>=0?"+":""}{money(evm.cv)}</div>
-                      </div>
-                      <span style={{display:"inline-flex",padding:"3px 10px",borderRadius:20,fontSize:12,fontWeight:800,background: nivelCosto?EVM_INDICE_COLOR[nivelCosto][0]:y.grayBg,color: nivelCosto?EVM_INDICE_COLOR[nivelCosto][1]:y.gray}}>{evm.cpi!=null ? evm.cpi.toFixed(2) : "—"}</span>
-                    </div>
-                    <div style={{background:y.surface,border:"1px solid "+y.border,borderRadius:8,padding:"0.55rem 0.7rem",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-                      <div>
-                        <div style={{fontSize:9.5,fontWeight:800,color:y.text3,textTransform:"uppercase",letterSpacing:.3}}>SPI (tiempo)</div>
-                        <div style={{fontSize:10,color:y.text3}}>SV: {evm.sv>=0?"+":""}{money(evm.sv)}</div>
-                      </div>
-                      <span style={{display:"inline-flex",padding:"3px 10px",borderRadius:20,fontSize:12,fontWeight:800,background: nivelTiempo?EVM_INDICE_COLOR[nivelTiempo][0]:y.grayBg,color: nivelTiempo?EVM_INDICE_COLOR[nivelTiempo][1]:y.gray}}>{evm.spi!=null ? evm.spi.toFixed(2) : "—"}</span>
-                    </div>
-                  </div>
-                  <div style={{fontSize:10,color:y.text3,marginTop:8}}>CPI y SPI de 1.00 o más = va bien. Entre 0.90 y 0.99 = alerta. Menos de 0.90 = fuera de línea base.</div>
-                </div>
-              );
-            })()}
 
             <SectionTitle>Descripción</SectionTitle>
             <textarea value={current.observacion} onChange={e => updateField(active,"observacion",e.target.value)} rows={3} placeholder="Describe el proyecto: qué se va a hacer, notas u observaciones..." style={{...inputStyle,width:"100%",resize:"vertical",fontSize:12.5,lineHeight:1.6}} />
@@ -1472,7 +1332,7 @@ function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, respon
             ) : cargandoCambios ? (
               <div style={{fontSize:12,color:y.text3}}>Cargando historial...</div>
             ) : cambiosProyecto.length === 0 ? (
-              <div style={{fontSize:12,color:y.text3,padding:"1rem 0"}}>Sin cambios registrados todavía. En cuanto guardes una modificación a código, categoría, prioridad, área, país, responsable, estado, fechas, presupuesto, gasto real o ticket, aparecerá aquí automáticamente.</div>
+              <div style={{fontSize:12,color:y.text3,padding:"1rem 0"}}>Sin cambios registrados todavía. En cuanto guardes una modificación a código, categoría, prioridad, área, país, responsable, estado, fechas o ticket, aparecerá aquí automáticamente.</div>
             ) : (
               <div style={{overflowX:"auto"}}>
                 <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
@@ -2315,9 +2175,6 @@ function App() {
       "Fecha fin": p.fecha_fin || "",
       "Avance (%)": Math.round(avanceEfectivo(p, tareasPorProyecto[p.id]) * 100),
       "Estado": p.estado || "",
-      "Presupuesto": p.presupuesto !== null && p.presupuesto !== undefined && p.presupuesto !== "" ? parseFloat(p.presupuesto) || 0 : "",
-      "Gasto real": p.gasto_real !== null && p.gasto_real !== undefined && p.gasto_real !== "" ? parseFloat(p.gasto_real) || 0 : "",
-      "Desviación (%)": saludPresupuesto(p) ? saludPresupuesto(p).pct - 100 : "",
       "Archivo": p.archivo_nombre || "",
       "Observación": p.observacion || ""
     }));
@@ -2338,10 +2195,7 @@ function App() {
       p.responsable || "",
       (p.fecha_inicio || "") + (p.fecha_fin ? " → " + p.fecha_fin : ""),
       Math.round(avanceEfectivo(p, tareasPorProyecto[p.id]) * 100) + "%",
-      p.estado || "",
-      p.presupuesto !== null && p.presupuesto !== undefined && p.presupuesto !== "" ? "$" + (parseFloat(p.presupuesto) || 0).toLocaleString("es-HN") : "",
-      p.gasto_real !== null && p.gasto_real !== undefined && p.gasto_real !== "" ? "$" + (parseFloat(p.gasto_real) || 0).toLocaleString("es-HN") : "",
-      saludPresupuesto(p) ? saludPresupuesto(p).nivel : ""
+      p.estado || ""
     ]);
     doc.setFontSize(14);
     doc.text("Proyectos — Kielsa CI", 14, 15);
@@ -2349,7 +2203,7 @@ function App() {
     doc.setTextColor(120);
     doc.text("Generado el " + new Date().toLocaleDateString("es-HN") + " · " + filtrados.length + " proyecto(s)", 14, 21);
     doc.autoTable({
-      head: [["Cód.", "Categoría", "Nombre", "Área", "País", "Responsable", "Fechas", "Avance", "Estado", "Presupuesto", "Gastado", "Salud"]],
+      head: [["Cód.", "Categoría", "Nombre", "Área", "País", "Responsable", "Fechas", "Avance", "Estado"]],
       body: filas,
       startY: 26,
       styles: { fontSize: 8, cellPadding: 2 },
@@ -2636,20 +2490,19 @@ function App() {
                   <table style={{borderCollapse:"collapse",width:"100%",minWidth:1100}}>
                     <thead>
                       <tr style={{background:y.grayBg}}>
-                        {["Cód.","Categoría","Nombre","Área","País","Responsable","Fechas","Avance","Presupuesto","Estado","Acciones"].map(h => (
+                        {["Cód.","Categoría","Nombre","Área","País","Responsable","Fechas","Avance","Estado","Acciones"].map(h => (
                           <th key={h} style={{padding:"0.5rem 0.6rem",textAlign:"left",fontSize:10,fontWeight:700,color:y.text3,borderBottom:"2px solid "+y.border2,textTransform:"uppercase",whiteSpace:"nowrap"}}>{h}</th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
                       {filtrados.length === 0 && (
-                        <tr><td colSpan={11} style={{padding:"2rem",textAlign:"center",color:y.text3}}>Sin proyectos</td></tr>
+                        <tr><td colSpan={10} style={{padding:"2rem",textAlign:"center",color:y.text3}}>Sin proyectos</td></tr>
                       )}
                       {filtrados.map(p => {
                         const tareasP = tareasPorProyecto[p.id] || [];
                         const avancePct = Math.round(avanceEfectivo(p, tareasP)*100);
                         const v = estadoVencimiento(p);
-                        const salud = saludPresupuesto(p);
                         return (
                           <tr key={p.id} style={{borderBottom:"1px solid "+y.border}}>
                             <td style={{padding:"6px 8px",fontSize:12}}>{p.codigo}</td>
@@ -2667,14 +2520,6 @@ function App() {
                               )}
                             </td>
                             <td style={{padding:"6px 8px",fontSize:12}}>{avancePct}%{tareasP.length > 0 && <div style={{fontSize:10,color:y.text3}}>{tareasP.filter(t=>t.completada).length}/{tareasP.length} tareas</div>}</td>
-                            <td style={{padding:"6px 8px",fontSize:11,color:y.text3}}>
-                              {p.presupuesto ? "$"+parseFloat(p.presupuesto).toLocaleString("es-HN") : "—"}
-                              {salud && (
-                                <div style={{marginTop:2}}>
-                                  <span style={{display:"inline-flex",padding:"2px 7px",borderRadius:20,fontSize:9.5,fontWeight:700,background:SALUD_PRESUPUESTO_COLOR[salud.nivel][0],color:SALUD_PRESUPUESTO_COLOR[salud.nivel][1],whiteSpace:"nowrap"}}>{salud.pct}% · {salud.nivel}</span>
-                                </div>
-                              )}
-                            </td>
                             <td style={{padding:"6px 8px"}}><Badge label={p.estado || "Pendiente"} /></td>
                             <td style={{padding:"6px 8px",whiteSpace:"nowrap"}}>
                               {puedeEditar && <Btn sm onClick={() => setModal({mode:"edit", project:p})}><i className="ti ti-pencil"/></Btn>}{" "}

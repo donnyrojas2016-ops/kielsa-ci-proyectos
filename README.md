@@ -36,8 +36,8 @@ Cifrar la contraseña de verdad (que se guarde y compare como hash, no en texto)
 - Menú lateral con Usuarios, Accesos, Áreas, Países, Responsables y Carga de trabajo (catálogos e informativas) además de Proyectos — ver sección "Menú lateral" abajo.
 - Agregar proyectos (uno o varios a la vez, mismo formulario tipo pestañas que usas en Hallazgos).
 - Editar y eliminar proyectos.
-- Formulario de proyecto rediseñado (ver secciones más abajo): secciones claras (Datos generales, Asignación, Fechas y estado, Presupuesto y archivos, Descripción), pestaña de **Cronograma** con línea de tiempo (Gantt), ruta crítica y **matriz RACI** por tarea, pestaña de **Riesgos** con matriz de probabilidad × impacto, comparación de **presupuesto vs. gasto real** con semáforo de salud y panel de **Valor Ganado (EVM)** con CPI/SPI, vista de **Carga de trabajo** por persona, y pestaña de **Historial de cambios** que registra automáticamente quién cambió qué y cuándo.
-- Exportar a Excel y a PDF la lista filtrada (incluye la columna Presupuesto).
+- Formulario de proyecto rediseñado (ver secciones más abajo): secciones claras (Datos generales, Asignación, Fechas y estado, Ticket y archivo, Descripción), pestaña de **Cronograma** con línea de tiempo (Gantt), ruta crítica y **matriz RACI** por tarea, pestaña de **Riesgos** con matriz de probabilidad × impacto, vista de **Carga de trabajo** por persona, y pestaña de **Historial de cambios** que registra automáticamente quién cambió qué y cuándo.
+- Exportar a Excel y a PDF la lista filtrada.
 
 ## Activar los comentarios (una sola vez en Supabase)
 
@@ -146,7 +146,7 @@ Junto al botón de Excel hay uno nuevo de **PDF**: descarga exactamente la misma
 
 Rediseñé por completo el formulario de "Agregar/Editar proyecto" con el formato clásico por secciones que me pediste, usando como referencia el Excel que me compartiste. Al editar un proyecto ahora hay tres pestañas:
 
-- **Datos del proyecto** — organizado en secciones: Datos generales (código, categoría, prioridad, nombre), Asignación (área, país, responsable), Fechas y estado (fecha de solicitud, fecha de inicio, vencimiento, estado y avance), Presupuesto y archivos (presupuesto, ticket, archivo/documento) y Descripción. Abajo del todo se ve un pequeño texto con la fecha y el usuario de la última actualización.
+- **Datos del proyecto** — organizado en secciones: Datos generales (código, categoría, prioridad, nombre), Asignación (área, país, responsable), Fechas y estado (fecha de solicitud, fecha de inicio, vencimiento, estado y avance), Ticket y archivo (ticket, archivo/documento) y Descripción. Abajo del todo se ve un pequeño texto con la fecha y el usuario de la última actualización.
 - **Cronograma** — la tabla de tareas del proyecto, estilo Gantt: cada tarea tiene número EDT (automático, según el orden), responsable, de qué otra tarea depende, fecha de inicio y de entrega, días de duración (calculados solos), % de avance y estatus (Pendiente / En proceso / Completada). Si una tarea no está completada y ya pasó su fecha de entrega, el sistema la marca sola como **Vencida** en rojo, sin que nadie tenga que cambiarla a mano. El avance general del proyecto ahora es el promedio del % de avance de todas sus tareas (antes solo contaba tareas completas vs. incompletas).
 - **Comentarios** — la misma bitácora de comentarios de antes, ahora en su propia pestaña.
 
@@ -171,7 +171,6 @@ Estas columnas se agregan a las tablas `proyectos` y `proyecto_tareas` que ya ex
 
 ```sql
 alter table proyectos add column if not exists fecha_solicitud date;
-alter table proyectos add column if not exists presupuesto numeric;
 alter table proyectos add column if not exists archivo_nombre text;
 alter table proyectos add column if not exists actualizado_en timestamptz;
 alter table proyectos add column if not exists actualizado_por text;
@@ -217,36 +216,15 @@ grant select, insert, update, delete on proyecto_riesgos to anon, authenticated;
 
 3. Listo. En cuanto subas el `index.html` de este paquete, la pestaña "Riesgos" de cada proyecto ya podrá crear, editar y eliminar riesgos.
 
-## Costo real vs. planeado
-
-Tercera mejora del diagnóstico: junto al Presupuesto (planeado) ahora hay un campo **Gasto real**, para capturar cuánto se ha gastado de verdad en el proyecto. En cuanto los dos campos tienen un valor, aparece automáticamente una barra comparando ambos, con un porcentaje y una etiqueta de salud: **En rango** (hasta 90% del presupuesto gastado), **Al límite** (91%–110%) o **Sobre presupuesto** (más de 110%) — los mismos tres colores (verde/amarillo/rojo) que ya usas en otras partes de la app.
-
-Esa misma etiqueta de salud ahora también aparece en la vista de tabla de Proyectos, en una columna nueva "Presupuesto", para que puedas ver de un vistazo qué proyectos se están saliendo de presupuesto sin tener que entrar a cada uno. Y tanto el Excel como el PDF exportado ahora incluyen el gasto real y la desviación, además del presupuesto planeado.
-
-Este es el primer paso hacia lo que los estándares llaman "Valor Ganado" (comparar lo planeado, lo ganado según el avance, y lo gastado) — con presupuesto y gasto real ya capturados, ese cálculo completo queda mucho más cerca si más adelante lo quieres agregar.
-
-### Activar el campo de gasto real (una sola vez en Supabase)
-
-Esta es una columna nueva en la tabla `proyectos` que ya existe y ya funciona, así que **no hace falta tocar permisos ni RLS**:
-
-1. Entra a supabase.com → tu proyecto → **SQL Editor** → **New query**.
-2. Pega y ejecuta (botón **Run**) exactamente esto:
-
-```sql
-alter table proyectos add column if not exists gasto_real numeric;
-```
-
-3. Listo. En cuanto subas el `index.html` de este paquete, el campo "Gasto real" y la comparación de presupuesto ya funcionan.
-
 ## Carga de trabajo por persona
 
-Cuarta mejora del diagnóstico: en el menú lateral hay un ítem nuevo, **Carga de trabajo**, que junta las tareas del Cronograma de TODOS los proyectos (no solo uno) y las agrupa por responsable. Para cada persona muestra cuántas tareas activas tiene en este momento (sin contar las ya completadas), cuántas de esas están vencidas, en qué proyectos están, y una etiqueta de carga: **Baja** (1-2 tareas activas), **Media** (3-5) o **Alta** (6 o más) — para detectar de un vistazo quién tiene demasiado encima y quién tiene espacio para más trabajo. Las tareas sin responsable asignado se agrupan aparte, como "Sin asignar", para que no se pierdan de vista.
+Tercera mejora del diagnóstico: en el menú lateral hay un ítem nuevo, **Carga de trabajo**, que junta las tareas del Cronograma de TODOS los proyectos (no solo uno) y las agrupa por responsable. Para cada persona muestra cuántas tareas activas tiene en este momento (sin contar las ya completadas), cuántas de esas están vencidas, en qué proyectos están, y una etiqueta de carga: **Baja** (1-2 tareas activas), **Media** (3-5) o **Alta** (6 o más) — para detectar de un vistazo quién tiene demasiado encima y quién tiene espacio para más trabajo. Las tareas sin responsable asignado se agrupan aparte, como "Sin asignar", para que no se pierdan de vista.
 
 Esta vista **no necesita ninguna tabla ni columna nueva en Supabase** — usa exactamente las mismas tareas del Cronograma que ya se cargan para las alertas y el avance de cada proyecto, solo que agrupadas de otra forma. En cuanto subas el `index.html` de este paquete, "Carga de trabajo" ya funciona.
 
 ## Registro de cambios
 
-Quinta mejora del diagnóstico: cada proyecto ahora tiene, junto a Cronograma, Riesgos y Comentarios, una pestaña **Historial de cambios**. A diferencia de las demás, esta no tiene formulario ni botón — se llena sola cada vez que guardas una edición al proyecto: la app compara los datos de antes y después de guardar (código, categoría, prioridad, área, país, responsable, estado, fechas, presupuesto, gasto real y ticket) y, por cada campo que haya cambiado, agrega una fila con la fecha, quién hizo el cambio, el campo, el valor anterior (tachado) y el valor nuevo. Si no cambió nada relevante en ese guardado, no se agrega ninguna fila.
+Cuarta mejora del diagnóstico: cada proyecto ahora tiene, junto a Cronograma, Riesgos y Comentarios, una pestaña **Historial de cambios**. A diferencia de las demás, esta no tiene formulario ni botón — se llena sola cada vez que guardas una edición al proyecto: la app compara los datos de antes y después de guardar (código, categoría, prioridad, área, país, responsable, estado, fechas y ticket) y, por cada campo que haya cambiado, agrega una fila con la fecha, quién hizo el cambio, el campo, el valor anterior (tachado) y el valor nuevo. Si no cambió nada relevante en ese guardado, no se agrega ninguna fila.
 
 Esto responde a lo que piden los estándares de gestión de proyectos como control de cambios / trazabilidad: poder ver quién cambió qué y cuándo, sin depender de que alguien lo anote a mano en un comentario. Es de solo lectura — no se puede editar ni borrar una fila del historial una vez creada, para que sirva como bitácora confiable.
 
@@ -275,7 +253,7 @@ grant select, insert, update, delete on proyecto_cambios to anon, authenticated;
 
 ## Matriz RACI por tarea
 
-Sexta y última mejora del diagnóstico: dentro de la pestaña Cronograma, cada tarea ahora tiene su propia mini "matriz RACI" además del Responsable de siempre. Al agregar o editar una tarea vas a ver una sección nueva, "Matriz RACI de la tarea", con tres campos: **Aprobador** (quien rinde cuentas por el resultado — se elige del mismo catálogo de Responsables), **Consultados** (a quién se le pide opinión antes o durante la tarea) e **Informados** (a quién se le avisa del avance o resultado, sin que participe directamente) — estos dos últimos son de texto libre, para poner uno o varios nombres separados por coma.
+Quinta y última mejora del diagnóstico: dentro de la pestaña Cronograma, cada tarea ahora tiene su propia mini "matriz RACI" además del Responsable de siempre. Al agregar o editar una tarea vas a ver una sección nueva, "Matriz RACI de la tarea", con tres campos: **Aprobador** (quien rinde cuentas por el resultado — se elige del mismo catálogo de Responsables), **Consultados** (a quién se le pide opinión antes o durante la tarea) e **Informados** (a quién se le avisa del avance o resultado, sin que participe directamente) — estos dos últimos son de texto libre, para poner uno o varios nombres separados por coma.
 
 Para verlos todos juntos sin tener que abrir tarea por tarea, arriba de la tabla del Cronograma hay un botón **"Ver matriz RACI"** que despliega una tabla compacta con una fila por tarea y una columna por cada letra (R/A/C/I), con su leyenda arriba. Esto responde a lo que piden los estándares de gestión de proyectos sobre roles y responsabilidades claras: quién ejecuta (R, el Responsable de siempre) no tiene por qué ser lo mismo que quién aprueba (A), y ambos son distintos de a quién solo se consulta o se informa.
 
@@ -294,50 +272,34 @@ alter table proyecto_tareas add column if not exists informados text;
 
 3. Listo. En cuanto subas el `index.html` de este paquete, el formulario de tareas ya muestra los campos de Aprobador/Consultados/Informados, y el botón "Ver matriz RACI" ya funciona.
 
-## Valor Ganado (EVM)
-
-Séptima mejora, ya fuera del diagnóstico original: con presupuesto, gasto real, fechas y % de avance ya capturados, agregamos el cálculo clásico de **Valor Ganado** (Earned Value Management), el estándar más usado en PMBOK para saber de un vistazo si un proyecto va bien en plata y en tiempo al mismo tiempo — algo que "Costo real vs. planeado" por sí solo no alcanza a mostrar, porque no dice si ese gasto va al ritmo correcto según cuánto tiempo ha pasado.
-
-Debajo de la comparación de presupuesto (en la pestaña "Datos del proyecto", siempre que el proyecto tenga presupuesto, fecha de inicio y vencimiento capturados) aparece un panel nuevo con:
-
-- **PV — Valor planeado**: cuánto presupuesto "debería" llevarse gastado según el tiempo transcurrido entre el inicio y el vencimiento planeados.
-- **EV — Valor ganado**: presupuesto × % de avance real del proyecto (del Cronograma si tiene tareas, si no del campo % avance).
-- **AC — Costo real**: el gasto real que ya capturas.
-- **CPI** (índice de desempeño de costo) = EV ÷ AC, con la variación de costo (CV = EV − AC) debajo.
-- **SPI** (índice de desempeño de cronograma) = EV ÷ PV, con la variación de cronograma (SV = EV − PV) debajo.
-
-Ambos índices se pintan en verde (1.00 o más, va bien), amarillo (0.90–0.99, alerta) o rojo (menos de 0.90, fuera de línea base) — el mismo lenguaje de semáforo que ya usas en el resto de la app. Si el proyecto todavía no tiene gasto real capturado, el CPI se muestra como "—" en vez de un número engañoso (no se puede calcular sin un gasto contra qué comparar), pero el SPI sigue calculándose porque solo depende de fechas y avance.
-
-**Nota sobre el cálculo de PV:** como la app no maneja un presupuesto repartido tarea por tarea con su propia fecha, el Valor Planeado se aproxima de forma lineal (presupuesto × % del tiempo ya transcurrido entre inicio y vencimiento). Es la aproximación estándar cuando no se tiene una línea base detallada por actividad, y mejora sola si más adelante quieres repartir presupuesto por tarea del Cronograma.
-
-### Activar el Valor Ganado
-
-No hace falta ninguna tabla ni columna nueva en Supabase — el cálculo usa exactamente los mismos campos que ya capturas (presupuesto, gasto real, fecha de inicio, vencimiento y avance). En cuanto subas el `index.html` de este paquete, el panel "Valor Ganado (EVM)" ya aparece solo en cualquier proyecto que tenga esos cuatro datos.
-
 ## Endurecimiento del login
 
 Mejora de seguridad al login, sin tocar el formato de la contraseña (ver la nota de seguridad más arriba sobre por qué el cifrado completo no se puede hacer solo en esta página). Antes, la pantalla de inicio de sesión pedía la tabla `usuarios` completa — con la contraseña de cada persona en texto — en cuanto alguien cargaba la página, sin importar si llegaba a escribir algo o si el usuario/clave eran correctos. Ahora la consulta se filtra por el usuario que se está escribiendo, así que solo esa una fila viaja por la red; la contraseña del resto de la gente ya no se expone en cada intento de login.
 
 No necesita ningún cambio en Supabase — es solo un ajuste a cómo la app pide los datos. En cuanto subas el `index.html` de este paquete, ya queda activo.
 
+## Sobre el costo del proyecto (quitado)
+
+Habíamos agregado Presupuesto, Gasto real, la comparación de salud de presupuesto y el panel de Valor Ganado (EVM), pero se decidió no incluir el costo del proyecto en esta página — así que quité los tres del formulario, de la vista de tabla y de las exportaciones a Excel y PDF. La sección "Presupuesto y archivos" del formulario ahora es simplemente "Ticket y archivo".
+
+Si en algún momento ya habías corrido el SQL que agregaba las columnas `presupuesto` y `gasto_real` a la tabla `proyectos`, no hace falta que las borres — se quedan ahí sin usarse, sin ningún efecto sobre el resto de la app. Si prefieres quitarlas también de la base de datos, dímelo y te paso el `alter table ... drop column` correspondiente (esa sí es una operación que borra datos, así que la dejo fuera de las instrucciones automáticas).
+
 ## Verificación realizada
 
 Antes de entregarla, probé el archivo con un navegador automatizado (React + Babel compilando sin errores) simulando datos de Supabase, cubriendo: login → agregar/editar/eliminar proyecto → KPIs y lista actualizados; Kanban (arrastrar y soltar entre columnas); alertas de vencimiento; comentarios/bitácora (agregar y borrar); roles y permisos (Administrador ve todo, Editor no puede eliminar, Solo lectura no puede editar); el menú lateral completo (Usuarios, Accesos, Áreas, Países, Responsables, Proyectos), el alta/edición/baja de Áreas y Responsables, que los nuevos valores aparecen de inmediato como opción en el formulario de proyectos, y la descarga en PDF — todo sin errores de consola.
 
-En esta última ronda (formulario rediseñado y Cronograma) probé además: abrir un proyecto y moverse entre las tres pestañas (Datos del proyecto, Cronograma, Comentarios); agregar una tarea nueva al Cronograma y verla aparecer con su número EDT, duración calculada y estatus; editar esa misma tarea; que una tarea vencida (fecha de entrega ya pasada y no completada) se marque sola como "Vencida"; que el avance general del proyecto se recalcule como el promedio del % de avance de todas las tareas, tanto en la pestaña Cronograma como en la barra de solo-lectura de la pestaña Datos; que el modo "Agregar proyectos" (uno o varios a la vez) siga funcionando sin pestañas, tal como antes; y que la exportación a Excel y PDF incluya la columna Presupuesto y el avance correcto — todo sin errores de consola.
+En esta última ronda (formulario rediseñado y Cronograma) probé además: abrir un proyecto y moverse entre las tres pestañas (Datos del proyecto, Cronograma, Comentarios); agregar una tarea nueva al Cronograma y verla aparecer con su número EDT, duración calculada y estatus; editar esa misma tarea; que una tarea vencida (fecha de entrega ya pasada y no completada) se marque sola como "Vencida"; que el avance general del proyecto se recalcule como el promedio del % de avance de todas las tareas, tanto en la pestaña Cronograma como en la barra de solo-lectura de la pestaña Datos; que el modo "Agregar proyectos" (uno o varios a la vez) siga funcionando sin pestañas, tal como antes; y que la exportación a Excel y PDF incluya el avance correcto — todo sin errores de consola.
 
 Después, ya con la línea de tiempo (Gantt) y la ruta crítica, probé con un proyecto de prueba con tareas encadenadas por dependencia (una tarea depende de la anterior, y esa de otra) que la ruta crítica calculada coincidiera con la cadena que realmente determina la fecha de fin del proyecto — y no con una tarea vencida pero aislada que no afecta el fin real —, que las barras del Gantt quedaran bien ubicadas y del tamaño correcto según sus fechas, que la franja de % de avance se viera dentro de cada barra, y que una tarea sin fecha de inicio o de entrega se mostrara como "Sin fechas" en vez de romper la escala del resto. Todo sin errores de consola.
 
 Con el registro de riesgos probé: abrir la pestaña Riesgos y ver los riesgos existentes con su nivel ya calculado; agregar un riesgo nuevo y verlo aparecer con los valores por defecto (Media/Medio); editar un riesgo existente y confirmar que el formulario se llena con sus datos; que un riesgo Alto/Alto salga en nivel "Alto" y dispare el aviso rojo, mientras que uno Media/Medio sale en "Medio" sin disparar el aviso; y que el contador de la pestaña ("Riesgos 3") se actualice al agregar. Todo sin errores de consola.
 
-Con el costo real vs. planeado probé: capturar un gasto real mayor al presupuesto y ver que la barra y la etiqueta salgan en rojo ("Sobre presupuesto") tanto en la pestaña Datos como en la columna nueva de la tabla de Proyectos; que el porcentaje se calcule bien (gasto real ÷ presupuesto); y que la exportación a Excel y PDF incluya el gasto real y la desviación sin errores. Todo sin errores de consola.
-
 Con la carga de trabajo probé, usando tareas de dos proyectos distintos asignadas a las mismas personas: que las tareas se agrupen bien por responsable sumando de todos los proyectos (no solo uno); que el conteo de tareas activas y vencidas salga correcto; que la lista de proyectos por persona se arme bien; que las tareas sin responsable se agrupen aparte como "Sin asignar"; y que la etiqueta de carga (Baja/Media/Alta) coincida con los umbrales esperados. Todo sin errores de consola.
 
-Con el registro de cambios probé: abrir la pestaña "Historial de cambios" de un proyecto con un cambio ya registrado y ver la fila con su fecha, usuario, campo, valor anterior tachado y valor nuevo; editar el proyecto cambiando el Estado y el Presupuesto y guardar; reabrir el proyecto y confirmar que las dos filas nuevas aparecen solas en el historial, con el campo correcto ("Estado", "Presupuesto"), el valor anterior real (no el que estaba en el formulario a medio llenar) y el valor nuevo ya formateado (el presupuesto con el signo "$"); y que guardar sin cambiar nada relevante no agregue filas de más. Todo sin errores de consola.
+Con el registro de cambios probé: abrir la pestaña "Historial de cambios" de un proyecto con un cambio ya registrado y ver la fila con su fecha, usuario, campo, valor anterior tachado y valor nuevo; editar el proyecto cambiando el Estado y guardar; reabrir el proyecto y confirmar que la fila nueva aparece sola en el historial, con el campo correcto ("Estado"), el valor anterior real (no el que estaba en el formulario a medio llenar) y el valor nuevo; y que guardar sin cambiar nada relevante no agregue filas de más. Todo sin errores de consola.
 
 Con la matriz RACI probé: abrir el botón "Ver matriz RACI" de un proyecto con tareas que ya tenían Aprobador/Consultados/Informados capturados y confirmar que la tabla compacta los muestra bien, uno por columna; editar una tarea que no tenía nada de RACI, llenar el Aprobador (de la lista de Responsables), Consultados e Informados (texto libre) y guardar; confirmar que la matriz se actualiza sola, sin recargar, con los valores nuevos en la fila correcta; y, ya con la pestaña cerrada y el proyecto completo guardado, reabrirlo desde cero y confirmar que los datos de RACI siguen ahí (no se perdieron al recargar desde el origen de datos). Todo sin errores de consola.
 
-Con el Valor Ganado probé dos proyectos con datos muy distintos: uno ya vencido y sobre presupuesto (gasto real mayor al presupuesto, fecha de vencimiento ya pasada) donde el PV sale al 100% del presupuesto, el CPI y el SPI salen ambos por debajo de 0.90 y se pintan en rojo, y la variación de costo (CV) sale negativa; y otro proyecto en curso, sin gasto real capturado todavía, donde el CPI se muestra correctamente como "—" (en vez de un cálculo engañoso con AC en cero) mientras el SPI sí se calcula solo con fechas y avance y sale en rojo por estar atrasado. También confirmé que el panel no aparece si al proyecto le falta presupuesto o alguna de las dos fechas. Todo sin errores de consola.
+Con el endurecimiento del login probé: iniciar sesión con usuario y clave correctos (como Administrador y como Editor, dos cuentas distintas) y confirmar que ambas entran normal; escribir una clave incorrecta y confirmar que sigue mostrando el mismo mensaje de error de siempre ("Usuario y clave incorrectas"), sin distinguir si el usuario existe o no (para no dar pistas de más); y confirmar que la consulta a Supabase ahora sí va filtrada por el usuario escrito. Todo sin errores de consola.
 
-Con el endurecimiento del login probé: iniciar sesión con usuario y clave correctos (como Administrador y como Editor, dos cuentas distintas) y confirmar que ambas entran normal; escribir una clave incorrecta y confirmar que sigue mostrando el mismo mensaje de error de siempre ("Usuario y clave incorrectas"), sin distinguir si el usuario existe o no (para no dar pistas de más); y confirmar que la consulta a Supabase ahora sí va filtrada por el usuario escrito. Todo sin errores de consola. Los íconos y las llamadas reales a Supabase no se pudieron probar en vivo desde este entorno (no tiene salida a internet), así que la primera prueba real de conexión a datos debe hacerse ya en Vercel.
+Después de quitar el costo del proyecto probé: que la pestaña "Datos del proyecto" ya no muestre Presupuesto, Gasto real ni el panel de Valor Ganado en ningún proyecto (revisé uno que antes sí los mostraba); que la vista de tabla ya no tenga la columna "Presupuesto"; que guardar un proyecto (sin tocar nada de costo) siga funcionando normal; y que la descarga de Excel y de PDF se sigan generando sin errores, ya sin esas columnas. Todo sin errores de consola. Los íconos y las llamadas reales a Supabase no se pudieron probar en vivo desde este entorno (no tiene salida a internet), así que la primera prueba real de conexión a datos debe hacerse ya en Vercel.
