@@ -100,6 +100,30 @@ const RIESGO_NIVEL_COLOR = {
   "Alto": [y.dangerBg, y.danger]
 };
 
+/* ---------- Registro de interesados (stakeholders) ---------- */
+const INTERESADO_TIPOS = ["Interno","Externo"];
+const INTERESADO_INFLUENCIAS = ["Baja","Media","Alta"];
+const INTERESADO_INTERESES = ["Bajo","Medio","Alto"];
+
+// Estrategia de gestión según la matriz clásica de poder/interés (Mendelow) que usa PMBOK
+// para priorizar a quién atender de cerca y a quién basta con monitorear. Se trata como
+// "alta" solo la influencia/interés marcados "Alta"/"Alto"; cualquier otro valor cuenta
+// como "no alta", que es como se lee esta matriz en la práctica (2x2, no una escala fina).
+function estrategiaInteresado(influencia, interes) {
+  const influenciaAlta = influencia === "Alta";
+  const interesAlto = interes === "Alto";
+  if (influenciaAlta && interesAlto) return "Gestionar de cerca";
+  if (influenciaAlta && !interesAlto) return "Mantener satisfecho";
+  if (!influenciaAlta && interesAlto) return "Mantener informado";
+  return "Monitorear";
+}
+const ESTRATEGIA_INTERESADO_COLOR = {
+  "Gestionar de cerca": [y.dangerBg, y.danger],
+  "Mantener satisfecho": [y.warningBg, y.warning],
+  "Mantener informado": [y.primaryLight, y.primary],
+  "Monitorear": [y.grayBg, y.gray]
+};
+
 /* ---------- Carga de trabajo ---------- */
 // Nivel de carga según cuántas tareas activas (no completadas) tiene una persona
 // en TODOS los proyectos a la vez. 1-2: Baja. 3-5: Media. 6+: Alta.
@@ -617,6 +641,77 @@ function RiesgoForm({ riesgo, responsables, responsablesDisponibles, onGuardar, 
   );
 }
 
+/* ---------- Formulario de un interesado del proyecto (agregar o editar) ---------- */
+function InteresadoForm({ interesado, onGuardar, onCancelar }) {
+  const [nombre, setNombre] = useState(interesado ? interesado.nombre || "" : "");
+  const [tipo, setTipo] = useState(interesado ? interesado.tipo || "Interno" : "Interno");
+  const [rol, setRol] = useState(interesado ? interesado.rol || "" : "");
+  const [influencia, setInfluencia] = useState(interesado ? interesado.influencia || "Media" : "Media");
+  const [interes, setInteres] = useState(interesado ? interesado.interes || "Medio" : "Medio");
+  const [contacto, setContacto] = useState(interesado ? interesado.contacto || "" : "");
+  const [notas, setNotas] = useState(interesado ? interesado.notas || "" : "");
+
+  const guardar = () => {
+    if (!nombre.trim()) { alert("El nombre del interesado es obligatorio."); return; }
+    onGuardar({
+      nombre: nombre.trim(),
+      tipo,
+      rol: rol.trim() || null,
+      influencia,
+      interes,
+      contacto: contacto.trim() || null,
+      notas: notas.trim() || null
+    });
+  };
+
+  return (
+    <div style={{background:"#f0fdfa",border:"1px solid #99f6e4",borderRadius:10,padding:"0.9rem 1rem",marginBottom:12}}>
+      <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:10,marginBottom:10}}>
+        <div>
+          <label style={{...labelStyle,color:"#0f766e"}}>Interesado *</label>
+          <input autoFocus value={nombre} onChange={e => setNombre(e.target.value)} placeholder="Ej: Gerencia Financiera, Auditoría Interna, Proveedor SAP..." style={{...inputStyle,fontSize:12.5}} />
+        </div>
+        <div>
+          <label style={{...labelStyle,color:"#0f766e"}}>Tipo</label>
+          <select value={tipo} onChange={e => setTipo(e.target.value)} style={{...inputStyle,fontSize:12.5}}>
+            {INTERESADO_TIPOS.map(t => <option key={t}>{t}</option>)}
+          </select>
+        </div>
+      </div>
+      <div style={{marginBottom:10}}>
+        <label style={{...labelStyle,color:"#0f766e"}}>Rol / relación con el proyecto</label>
+        <input value={rol} onChange={e => setRol(e.target.value)} placeholder="Ej: Aprueba el presupuesto, usa el sistema a diario..." style={{...inputStyle,fontSize:12.5}} />
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:10}}>
+        <div>
+          <label style={{...labelStyle,color:"#0f766e"}}>Influencia (poder)</label>
+          <select value={influencia} onChange={e => setInfluencia(e.target.value)} style={{...inputStyle,fontSize:12.5}}>
+            {INTERESADO_INFLUENCIAS.map(i => <option key={i}>{i}</option>)}
+          </select>
+        </div>
+        <div>
+          <label style={{...labelStyle,color:"#0f766e"}}>Interés</label>
+          <select value={interes} onChange={e => setInteres(e.target.value)} style={{...inputStyle,fontSize:12.5}}>
+            {INTERESADO_INTERESES.map(i => <option key={i}>{i}</option>)}
+          </select>
+        </div>
+        <div>
+          <label style={{...labelStyle,color:"#0f766e"}}>Contacto</label>
+          <input value={contacto} onChange={e => setContacto(e.target.value)} placeholder="Correo o teléfono (opcional)" style={{...inputStyle,fontSize:12.5}} />
+        </div>
+      </div>
+      <div style={{marginBottom:12}}>
+        <label style={{...labelStyle,color:"#0f766e"}}>Notas de la estrategia de gestión</label>
+        <textarea value={notas} onChange={e => setNotas(e.target.value)} rows={2} placeholder="¿Cómo se le va a mantener informado, satisfecho o involucrado?" style={{...inputStyle,fontSize:12.5,resize:"vertical"}} />
+      </div>
+      <div style={{display:"flex",justifyContent:"flex-end",gap:8}}>
+        <Btn sm onClick={onCancelar}>Cancelar</Btn>
+        <Btn sm primary onClick={guardar}>{interesado ? "Guardar cambios" : "Agregar interesado"}</Btn>
+      </div>
+    </div>
+  );
+}
+
 function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, responsables, responsablesDisponibles, editProject, onClose, onSaved, onTareasChanged }) {
   const [drafts, setDrafts] = useState(() => editProject ? [{ ...editProject }] : [nuevoProyecto()]);
   const [active, setActive] = useState(0);
@@ -635,6 +730,12 @@ function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, respon
   const [cargandoRiesgos, setCargandoRiesgos] = useState(false);
   const [riesgosDisponibles, setRiesgosDisponibles] = useState(true);
   const [riesgoForm, setRiesgoForm] = useState(null); // null | {mode:"add"} | {mode:"edit", riesgo}
+
+  // ---- Interesados del proyecto (solo aplica en modo edición) ----
+  const [interesadosProyecto, setInteresadosProyecto] = useState([]);
+  const [cargandoInteresados, setCargandoInteresados] = useState(false);
+  const [interesadosDisponibles, setInteresadosDisponibles] = useState(true);
+  const [interesadoForm, setInteresadoForm] = useState(null); // null | {mode:"add"} | {mode:"edit", interesado}
 
   // ---- Registro de cambios del proyecto (solo lectura, se llena solo al guardar) ----
   const [cambiosProyecto, setCambiosProyecto] = useState([]);
@@ -744,6 +845,53 @@ function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, respon
     } catch (e) {
       alert("No se pudo eliminar el riesgo: " + (e.message || e));
       setRiesgosProyecto(list => [...list, riesgo]);
+    }
+  };
+
+  useEffect(() => {
+    if (!editProject) return;
+    (async () => {
+      setCargandoInteresados(true);
+      try {
+        const { data, error } = await supabase.from("proyecto_interesados").select("*").eq("proyectoId", editProject.id).order("id");
+        if (error) throw error;
+        setInteresadosProyecto(data || []);
+        setInteresadosDisponibles(true);
+      } catch (e) {
+        console.warn("Tabla proyecto_interesados no disponible:", e.message || e);
+        setInteresadosDisponibles(false);
+      } finally {
+        setCargandoInteresados(false);
+      }
+    })();
+  }, [editProject]);
+
+  const guardarInteresado = async (payload) => {
+    try {
+      if (interesadoForm && interesadoForm.mode === "edit") {
+        const { error } = await supabase.from("proyecto_interesados").update(payload).eq("id", interesadoForm.interesado.id);
+        if (error) throw error;
+        setInteresadosProyecto(list => list.map(i => i.id === interesadoForm.interesado.id ? { ...i, ...payload } : i));
+      } else {
+        const { data, error } = await supabase.from("proyecto_interesados").insert({ proyectoId: editProject.id, ...payload }).select();
+        if (error) throw error;
+        setInteresadosProyecto(list => [...list, ...(data || [])]);
+      }
+      setInteresadoForm(null);
+    } catch (e) {
+      alert("No se pudo guardar el interesado: " + (e.message || e) + (/column|relation/i.test(e.message||"") ? "\n\n(Puede que falte crear la tabla \"proyecto_interesados\" en Supabase — ver README.)" : ""));
+    }
+  };
+
+  const eliminarInteresado = async (interesado) => {
+    if (!window.confirm('¿Eliminar al interesado "' + interesado.nombre + '"?')) return;
+    setInteresadosProyecto(list => list.filter(i => i.id !== interesado.id));
+    try {
+      const { error } = await supabase.from("proyecto_interesados").delete().eq("id", interesado.id);
+      if (error) throw error;
+    } catch (e) {
+      alert("No se pudo eliminar el interesado: " + (e.message || e));
+      setInteresadosProyecto(list => [...list, interesado]);
     }
   };
 
@@ -939,6 +1087,7 @@ function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, respon
               { key:"datos", label:"Datos del proyecto", icon:"ti-file-text" },
               { key:"cronograma", label:"Cronograma", icon:"ti-calendar-stats", count: tareasProyecto.length },
               { key:"riesgos", label:"Riesgos", icon:"ti-alert-triangle", count: riesgosProyecto.length },
+              { key:"interesados", label:"Interesados", icon:"ti-users", count: interesadosProyecto.length },
               { key:"comentarios", label:"Comentarios", icon:"ti-message-circle", count: comentarios.length },
               { key:"cambios", label:"Historial de cambios", icon:"ti-history", count: cambiosProyecto.length }
             ].map(t => (
@@ -1286,6 +1435,79 @@ function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, respon
                   <div style={{background:y.dangerBg,borderRadius:10,padding:"0.75rem 1rem",marginTop:14,display:"flex",alignItems:"center",gap:12,fontSize:12.5,color:y.danger}}>
                     <i className="ti ti-alert-triangle"/>
                     Este proyecto tiene riesgos de nivel <strong>Alto</strong> todavía abiertos — revisa su plan de mitigación.
+                  </div>
+                )}
+              </React.Fragment>
+            )}
+          </React.Fragment>
+        )}
+
+        {editProject && tab === "interesados" && (
+          <React.Fragment>
+            {!interesadosDisponibles ? (
+              <div style={{fontSize:12,color:y.text3}}>Esta función todavía no está activada en la base de datos (falta crear la tabla "proyecto_interesados" — ver README).</div>
+            ) : cargandoInteresados ? (
+              <div style={{fontSize:12,color:y.text3}}>Cargando interesados...</div>
+            ) : (
+              <React.Fragment>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+                  <span style={{fontSize:12.5,fontWeight:700,color:y.text}}>{interesadosProyecto.length} {interesadosProyecto.length===1?"interesado":"interesados"}</span>
+                  {!interesadoForm && <Btn sm primary onClick={() => setInteresadoForm({mode:"add"})}><i className="ti ti-plus"/> Agregar interesado</Btn>}
+                </div>
+
+                {interesadoForm && (
+                  <InteresadoForm
+                    interesado={interesadoForm.mode === "edit" ? interesadoForm.interesado : null}
+                    onGuardar={guardarInteresado}
+                    onCancelar={() => setInteresadoForm(null)}
+                  />
+                )}
+
+                {interesadosProyecto.length === 0 ? (
+                  <div style={{fontSize:12,color:y.text3,padding:"1rem 0"}}>Sin interesados identificados todavía — agrega el primero con el botón de arriba.</div>
+                ) : (
+                  <div style={{overflowX:"auto"}}>
+                    <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+                      <thead>
+                        <tr style={{background:y.grayBg}}>
+                          {["Interesado","Tipo","Influencia","Interés","Estrategia","Contacto",""].map(h => (
+                            <th key={h} style={{textAlign:"left",fontSize:10,fontWeight:800,color:y.text3,textTransform:"uppercase",letterSpacing:.3,padding:"0.5rem 0.5rem",borderBottom:"1px solid "+y.border,whiteSpace:"nowrap"}}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {interesadosProyecto.map(i => {
+                          const estrategia = estrategiaInteresado(i.influencia, i.interes);
+                          const [estBg, estColor] = ESTRATEGIA_INTERESADO_COLOR[estrategia] || [y.grayBg, y.gray];
+                          return (
+                            <tr key={i.id} style={{borderBottom:"1px solid "+y.grayBg}}>
+                              <td style={{padding:"0.5rem",color:y.text,maxWidth:200}}>
+                                {i.nombre}
+                                {i.rol && <div style={{fontSize:10,color:y.text3,marginTop:1}}>{i.rol}</div>}
+                              </td>
+                              <td style={{padding:"0.5rem",color:y.text2,whiteSpace:"nowrap"}}>{i.tipo || "—"}</td>
+                              <td style={{padding:"0.5rem",color:y.text2,whiteSpace:"nowrap"}}>{i.influencia || "—"}</td>
+                              <td style={{padding:"0.5rem",color:y.text2,whiteSpace:"nowrap"}}>{i.interes || "—"}</td>
+                              <td style={{padding:"0.5rem"}}>
+                                <span style={{display:"inline-flex",padding:"3px 9px",borderRadius:20,fontSize:10.5,fontWeight:700,background:estBg,color:estColor,whiteSpace:"nowrap"}}>{estrategia}</span>
+                              </td>
+                              <td style={{padding:"0.5rem",color:y.text3,whiteSpace:"nowrap"}}>{i.contacto || "—"}</td>
+                              <td style={{padding:"0.5rem",textAlign:"right",whiteSpace:"nowrap"}}>
+                                <button onClick={() => setInteresadoForm({mode:"edit", interesado:i})} style={{background:"none",border:"none",color:y.text3,cursor:"pointer",padding:3}} title="Editar"><i className="ti ti-pencil" style={{fontSize:13}}/></button>
+                                <button onClick={() => eliminarInteresado(i)} style={{background:"none",border:"none",color:y.text3,cursor:"pointer",padding:3}} title="Eliminar"><i className="ti ti-trash" style={{fontSize:13}}/></button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {interesadosProyecto.length > 0 && interesadosProyecto.some(i => estrategiaInteresado(i.influencia, i.interes) === "Gestionar de cerca") && (
+                  <div style={{background:y.dangerBg,borderRadius:10,padding:"0.75rem 1rem",marginTop:14,display:"flex",alignItems:"center",gap:12,fontSize:12.5,color:y.danger}}>
+                    <i className="ti ti-alert-triangle"/>
+                    Este proyecto tiene interesados de alta influencia y alto interés — hay que <strong>gestionarlos de cerca</strong>.
                   </div>
                 )}
               </React.Fragment>
@@ -1936,6 +2158,7 @@ function Sidebar({ vista, setVista, miRol }) {
     { key:"paises", label:"Países", icon:"ti-world", adminOnly:true },
     { key:"responsables", label:"Responsables", icon:"ti-user-check", adminOnly:true },
     { key:"carga", label:"Carga de trabajo", icon:"ti-users-group", adminOnly:false },
+    { key:"reportes", label:"Reportes", icon:"ti-chart-bar", adminOnly:false },
     { key:"proyectos", label:"Proyectos", icon:"ti-briefcase", adminOnly:false }
   ];
   return (
@@ -2227,7 +2450,7 @@ function App() {
           </div>
         </div>
         <div style={{display:"flex",alignItems:"center",gap:12}}>
-          <div onClick={() => setAlertasAbiertas(v => !v)} title="Alertas de vencimiento" style={{position:"relative",width:34,height:34,borderRadius:8,background:"rgba(255,255,255,.12)",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>
+          <div onClick={() => { setVista("reportes"); setAlertasAbiertas(true); }} title="Alertas de vencimiento" style={{position:"relative",width:34,height:34,borderRadius:8,background:"rgba(255,255,255,.12)",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>
             <i className="ti ti-bell" style={{fontSize:15,color:"#fff"}}/>
             {alertas.length > 0 && (
               <span style={{position:"absolute",top:-4,right:-4,background:y.danger,color:"#fff",fontSize:9,fontWeight:800,borderRadius:20,padding:"1px 5px",border:"2px solid #16234a",lineHeight:1.3}}>{alertas.length}</span>
@@ -2253,11 +2476,11 @@ function App() {
         {vista === "paises" && <CatalogoView titulo="Países" descripcion="Países para asignar a un proyecto" icono="ti-world" tabla="paises" onChanged={cargarPaises} />}
         {vista === "responsables" && <CatalogoView titulo="Responsables" descripcion="Lista de responsables para asignar a un proyecto" icono="ti-user-check" tabla="proyecto_responsables" onChanged={cargarResponsables} />}
         {vista === "carga" && <CargaTrabajoView tareas={tareas} proyectos={proyectos} />}
-        {vista === "proyectos" && (
+        {vista === "reportes" && (
         loading ? (
           <div style={{textAlign:"center",padding:"4rem",color:y.text3}}>
             <i className="ti ti-loader-2" style={{fontSize:32}}/>
-            <div style={{marginTop:8,fontSize:13}}>Cargando proyectos...</div>
+            <div style={{marginTop:8,fontSize:13}}>Cargando reportes...</div>
           </div>
         ) : (
           <React.Fragment>
@@ -2289,7 +2512,7 @@ function App() {
                 const avance = items.length ? Math.round(items.reduce((s,p) => s+avanceEfectivo(p, tareasPorProyecto[p.id]),0)/items.length*100) : 0;
                 const { c, bg, ic } = CATEGORIA_ICONOS[cat] || { c:y.gray, bg:y.grayBg, ic:"ti-folder" };
                 return (
-                  <div key={cat} onClick={() => setFiltroCategoria(filtroCategoria === cat ? "" : cat)} style={{background:y.surface,border:"2px solid "+(filtroCategoria===cat?c:y.border),borderRadius:12,padding:"0.85rem 1rem",cursor:"pointer"}}>
+                  <div key={cat} onClick={() => { setFiltroCategoria(filtroCategoria === cat ? "" : cat); setVista("proyectos"); }} style={{background:y.surface,border:"2px solid "+(filtroCategoria===cat?c:y.border),borderRadius:12,padding:"0.85rem 1rem",cursor:"pointer"}}>
                     <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
                       <div style={{width:32,height:32,borderRadius:8,background:bg,display:"flex",alignItems:"center",justifyContent:"center",color:c}}>
                         <i className={"ti "+ic} style={{fontSize:16}}/>
@@ -2338,7 +2561,18 @@ function App() {
                 </div>
               </div>
             )}
+          </React.Fragment>
+        )
+        )}
 
+        {vista === "proyectos" && (
+        loading ? (
+          <div style={{textAlign:"center",padding:"4rem",color:y.text3}}>
+            <i className="ti ti-loader-2" style={{fontSize:32}}/>
+            <div style={{marginTop:8,fontSize:13}}>Cargando proyectos...</div>
+          </div>
+        ) : (
+          <React.Fragment>
             {/* Filtros y acciones */}
             <Card>
               <CardHeader
