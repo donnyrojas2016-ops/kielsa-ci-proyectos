@@ -325,6 +325,12 @@ Se conservan los dos atajos que ya tenías, ahora cruzando entre pestañas:
 
 No necesita ningún cambio en Supabase — es solo una reorganización de la pantalla. En cuanto subas el `index.html` de este paquete, ya queda activo.
 
+## Créditos de autoría
+
+Ya se agregó el texto **"Desarrollado por Donny Rojas"** en dos lugares: en la pantalla de inicio de sesión (debajo del botón "Ingresar") y como pie de página dentro de la app, debajo de la lista de proyectos. No necesita ningún cambio en Supabase — en cuanto subas el `index.html` de este paquete, ya se ve.
+
+**Sobre el logo:** todavía falta — para poder ponerlo en el encabezado y en la pantalla de login necesito el archivo de imagen (PNG, JPG o SVG). Súbelo en el chat cuando quieras y lo incrusto directamente en el `index.html` (sigue siendo un solo archivo, sin depender de que subas la imagen a otro lado).
+
 ## Endurecimiento del login
 
 Mejora de seguridad al login, sin tocar el formato de la contraseña (ver la nota de seguridad más arriba sobre por qué el cifrado completo no se puede hacer solo en esta página). Antes, la pantalla de inicio de sesión pedía la tabla `usuarios` completa — con la contraseña de cada persona en texto — en cuanto alguien cargaba la página, sin importar si llegaba a escribir algo o si el usuario/clave eran correctos. Ahora la consulta se filtra por el usuario que se está escribiendo, así que solo esa una fila viaja por la red; la contraseña del resto de la gente ya no se expone en cada intento de login.
@@ -360,3 +366,5 @@ Con el endurecimiento del login probé: iniciar sesión con usuario y clave corr
 Después de quitar el costo del proyecto probé: que la pestaña "Datos del proyecto" ya no muestre Presupuesto, Gasto real ni el panel de Valor Ganado en ningún proyecto (revisé uno que antes sí los mostraba); que la vista de tabla ya no tenga la columna "Presupuesto"; que guardar un proyecto (sin tocar nada de costo) siga funcionando normal; y que la descarga de Excel y de PDF se sigan generando sin errores, ya sin esas columnas. Todo sin errores de consola. Los íconos y las llamadas reales a Supabase no se pudieron probar en vivo desde este entorno (no tiene salida a internet), así que la primera prueba real de conexión a datos debe hacerse ya en Vercel.
 
 Con la separación de Reportes probé, con capturas de pantalla: que al entrar la pantalla de Proyectos se vea solo con filtros y lista, sin KPIs ni resumen por categoría; que la pestaña Reportes muestre solo los KPIs, el resumen por categoría y las alertas, sin filtros ni lista; que hacer clic en una tarjeta de categoría (por ejemplo "CI") navegue a Proyectos con esa categoría ya filtrada (de 2 proyectos bajó a 1, el que es de categoría CI); y que hacer clic en la campana de alertas navegue a Reportes con el panel de alertas abierto. Todo sin errores de consola.
+
+Con los créditos de autoría probé, con capturas de pantalla: que "Desarrollado por Donny Rojas" se vea debajo del botón "Ingresar" en la pantalla de login, antes de entrar; y que se vea también como pie de página después de iniciar sesión, debajo de la lista de proyectos. Todo sin errores de consola.
