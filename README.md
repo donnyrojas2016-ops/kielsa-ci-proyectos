@@ -24,6 +24,17 @@ Ya hice una primera mejora sobre esto (ver "Endurecimiento del login" más abajo
 
 Cifrar la contraseña de verdad (que se guarde y compare como hash, no en texto) es un cambio más grande que no pude hacer "solo en esta página": la tabla `usuarios` es la misma que usa la app principal de Kielsa CI, así que si cambio el formato de la contraseña aquí, la app principal también tendría que saber leerlo o la gente se quedaría sin poder entrar ahí — y esa app no está en este espacio de trabajo para revisarla. Si más adelante quieres hacerlo, lo ideal es coordinarlo con quien mantiene la app principal para actualizar las dos a la vez.
 
+### Aviso de Supabase: "Table publicly accessible" (RLS desactivado)
+
+Es esperable que en algún momento te llegue (o ya te haya llegado) un correo de Supabase avisando que varias tablas del proyecto `kielsa-ci` son de acceso público porque no tienen Row-Level Security (RLS) activado. Es real, no es spam: como ninguna de las dos apps (esta ni la principal) usa el sistema de cuentas de Supabase (Supabase Auth) — ambas tienen su propio login casero que compara usuario/clave contra una tabla y luego hacen sus consultas con la llave pública "anon" — cualquiera que consiga esa llave y la URL del proyecto (ambas viven en el código fuente de la página) podría leer, editar o borrar esas tablas directamente, sin pasar por el login.
+
+El aviso cubre el proyecto de Supabase completo, no solo las tablas `proyecto_*` que agregamos aquí: la app principal usa además `hallazgos`, `planes`, `usuarios`, `paises`, `procesos`, `auditores`, `areas`, `responsables`, `planes_trabajo` y `evidencias`, que probablemente también aparezcan en el aviso. Para ver la lista exacta de qué tablas están señaladas, en supabase.com → tu proyecto → **Database → Advisors**.
+
+**Decisión tomada (25 de agosto de 2026):** por ahora se deja así, ya que esta base de datos la usa solo el equipo interno y nadie externo conoce la URL ni la llave. No se hizo ningún cambio de RLS. Si más adelante se quiere cerrar esto de verdad, hay dos caminos, y ninguno se puede hacer "solo en esta página" porque tocan la tabla `usuarios` y probablemente la app principal:
+
+- **Arreglo real:** migrar el login actual a Supabase Auth (cuentas y sesiones reales) y luego escribir reglas de RLS que solo dejen ver/editar lo que a cada quien le corresponde.
+- **Silenciar la alerta sin arreglar el fondo:** activar RLS con una regla que sigue permitiendo todo ("allow all"). Supabase deja de avisar, pero el acceso público de facto sigue igual.
+
 ## Qué incluye
 
 - Pestaña **Reportes** separada, con los KPIs (total, cumplidos, en progreso, pendientes, avance promedio), el resumen por categoría (CI, Power Automate, Nuevo Proyecto) y las alertas de vencimiento — ver sección "Reportes (pestaña separada de Proyectos)" más abajo.
