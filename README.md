@@ -325,11 +325,15 @@ Se conservan los dos atajos que ya tenías, ahora cruzando entre pestañas:
 
 No necesita ningún cambio en Supabase — es solo una reorganización de la pantalla. En cuanto subas el `index.html` de este paquete, ya queda activo.
 
-## Créditos de autoría
+## Logo y créditos de autoría
 
-Ya se agregó el texto **"Desarrollado por Donny Rojas"** en dos lugares: en la pantalla de inicio de sesión (debajo del botón "Ingresar") y como pie de página dentro de la app, debajo de la lista de proyectos. No necesita ningún cambio en Supabase — en cuanto subas el `index.html` de este paquete, ya se ve.
+Se agregó el logo de Kielsa (el mismo que ya usa la app principal, tomado de ahí — círculo azul con cruz amarilla + texto "Kielsa") en el encabezado de la app y en la pantalla de inicio de sesión, además del ícono de la pestaña del navegador (favicon). Va incrustado directamente en el `index.html` como imagen (no depende de ningún archivo aparte ni de conexión a internet para cargar).
 
-**Sobre el logo:** todavía falta — para poder ponerlo en el encabezado y en la pantalla de login necesito el archivo de imagen (PNG, JPG o SVG). Súbelo en el chat cuando quieras y lo incrusto directamente en el `index.html` (sigue siendo un solo archivo, sin depender de que subas la imagen a otro lado).
+De paso, la pantalla de login se rediseñó para que se vea igual que la de la app principal de Kielsa CI: el mismo degradado de fondo azul, la misma tarjeta blanca centrada con el logo arriba, los mismos estilos de campos y de aviso de error, y el botón "Entrar →" con el mismo degradado. Ya no dice "Ingresar" sino "Entrar →", igual que en Kielsa CI.
+
+También se agregó el texto **"Desarrollado por Donny Rojas"** en dos lugares: en la pantalla de inicio de sesión (debajo del botón "Entrar →") y como pie de página dentro de la app, debajo de la lista de proyectos.
+
+No necesita ningún cambio en Supabase — en cuanto subas el `index.html` de este paquete, todo esto ya se ve.
 
 ## Endurecimiento del login
 
@@ -367,4 +371,4 @@ Después de quitar el costo del proyecto probé: que la pestaña "Datos del proy
 
 Con la separación de Reportes probé, con capturas de pantalla: que al entrar la pantalla de Proyectos se vea solo con filtros y lista, sin KPIs ni resumen por categoría; que la pestaña Reportes muestre solo los KPIs, el resumen por categoría y las alertas, sin filtros ni lista; que hacer clic en una tarjeta de categoría (por ejemplo "CI") navegue a Proyectos con esa categoría ya filtrada (de 2 proyectos bajó a 1, el que es de categoría CI); y que hacer clic en la campana de alertas navegue a Reportes con el panel de alertas abierto. Todo sin errores de consola.
 
-Con los créditos de autoría probé, con capturas de pantalla: que "Desarrollado por Donny Rojas" se vea debajo del botón "Ingresar" en la pantalla de login, antes de entrar; y que se vea también como pie de página después de iniciar sesión, debajo de la lista de proyectos. Todo sin errores de consola.
+Con el logo y el rediseño del login probé, con capturas de pantalla: que el logo de Kielsa se vea en la pantalla de login (arriba de "Kielsa CI — Proyectos") y en el encabezado de la app ya adentro; que el fondo, la tarjeta, los campos y el botón "Entrar →" tengan el mismo estilo que la app principal de Kielsa CI; que "Desarrollado por Donny Rojas" se vea debajo del botón "Entrar →" en el login y también como pie de página después de iniciar sesión; y que escribir una clave incorrecta muestre el aviso rojo "Usuario y clave incorrectas" con el mismo estilo que en Kielsa CI. Todo sin errores de consola.
