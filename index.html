@@ -383,9 +383,6 @@ function TareaForm({ tarea, tareasProyecto, responsables, responsablesDisponible
   const [fechaEntrega, setFechaEntrega] = useState(tarea ? tarea.fecha_entrega || "" : "");
   const [avance, setAvance] = useState(tarea ? avanceTarea(tarea) : 0);
   const [estatus, setEstatus] = useState(tarea ? (tarea.estatus || (tarea.completada ? "Completada" : "Pendiente")) : "Pendiente");
-  const [aprobador, setAprobador] = useState(tarea ? tarea.aprobador || "" : "");
-  const [consultados, setConsultados] = useState(tarea ? tarea.consultados || "" : "");
-  const [informados, setInformados] = useState(tarea ? tarea.informados || "" : "");
 
   const opcionesDependencia = tareasProyecto.filter(t => !tarea || t.id !== tarea.id);
 
@@ -399,10 +396,7 @@ function TareaForm({ tarea, tareasProyecto, responsables, responsablesDisponible
       fecha_entrega: fechaEntrega || null,
       porcentaje_avance: parseInt(avance) || 0,
       estatus,
-      completada: estatus === "Completada",
-      aprobador: aprobador || null,
-      consultados: consultados.trim() || null,
-      informados: informados.trim() || null
+      completada: estatus === "Completada"
     });
   };
 
@@ -461,30 +455,6 @@ function TareaForm({ tarea, tareasProyecto, responsables, responsablesDisponible
         </div>
       </div>
 
-      <div style={{fontSize:10.5,fontWeight:800,color:y.primary,textTransform:"uppercase",letterSpacing:.4,marginBottom:6,marginTop:2}}>Matriz RACI de la tarea</div>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
-        <div>
-          <label style={{...labelStyle,color:y.primary}}>Aprobador (A — rinde cuentas)</label>
-          {responsablesDisponibles && responsables && responsables.length > 0 ? (
-            <select value={aprobador} onChange={e => setAprobador(e.target.value)} style={{...inputStyle,fontSize:12.5}}>
-              <option value="">—</option>
-              {aprobador && !responsables.some(r => r.nombre === aprobador) && <option value={aprobador}>{aprobador}</option>}
-              {responsables.map(r => <option key={r.id} value={r.nombre}>{r.nombre}</option>)}
-            </select>
-          ) : (
-            <input value={aprobador} onChange={e => setAprobador(e.target.value)} style={{...inputStyle,fontSize:12.5}} />
-          )}
-        </div>
-        <div>
-          <label style={{...labelStyle,color:y.primary}}>Consultados (C)</label>
-          <input value={consultados} onChange={e => setConsultados(e.target.value)} placeholder="Nombres separados por coma" style={{...inputStyle,fontSize:12.5}} />
-        </div>
-      </div>
-      <div style={{marginBottom:12}}>
-        <label style={{...labelStyle,color:y.primary}}>Informados (I)</label>
-        <input value={informados} onChange={e => setInformados(e.target.value)} placeholder="Nombres separados por coma" style={{...inputStyle,fontSize:12.5}} />
-      </div>
-
       <div style={{display:"flex",justifyContent:"flex-end",gap:8}}>
         <Btn sm onClick={onCancelar}>Cancelar</Btn>
         <Btn sm primary onClick={guardar}>{tarea ? "Guardar cambios" : "Agregar tarea"}</Btn>
@@ -497,7 +467,6 @@ function TareaForm({ tarea, tareasProyecto, responsables, responsablesDisponible
 function PlanAccionPanel({ proyecto, tareasProyecto, responsables, responsablesDisponibles, puedeEditar, onTareasChanged, onClose }) {
   const [cargando, setCargando] = useState(false);
   const [tareaForm, setTareaForm] = useState(null); // null | {mode:"add"} | {mode:"edit", tarea}
-  const [mostrarRaci, setMostrarRaci] = useState(false);
 
   const rutaCritica = useMemo(() => calcularRutaCritica(tareasProyecto), [tareasProyecto]);
   const avancePctTareas = tareasProyecto.length ? Math.round(tareasProyecto.reduce((s,t) => s + avanceTarea(t), 0) / tareasProyecto.length) : 0;
@@ -586,46 +555,10 @@ function PlanAccionPanel({ proyecto, tareasProyecto, responsables, responsablesD
       <div style={{padding:"1rem 1.1rem"}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,gap:8,flexWrap:"wrap"}}>
           <span style={{fontSize:12.5,fontWeight:700,color:y.text}}>{tareasProyecto.length} {tareasProyecto.length===1?"tarea":"tareas"}</span>
-          {puedeEditar && (
-            <div style={{display:"flex",gap:8}}>
-              {tareasProyecto.length > 0 && (
-                <Btn sm onClick={() => setMostrarRaci(v => !v)}><i className="ti ti-table"/> {mostrarRaci ? "Ocultar" : "Ver"} matriz RACI</Btn>
-              )}
-              {!tareaForm && <Btn sm primary onClick={() => setTareaForm({mode:"add"})}><i className="ti ti-plus"/> Agregar tarea</Btn>}
-            </div>
+          {puedeEditar && !tareaForm && (
+            <Btn sm primary onClick={() => setTareaForm({mode:"add"})}><i className="ti ti-plus"/> Agregar tarea</Btn>
           )}
         </div>
-
-        {mostrarRaci && tareasProyecto.length > 0 && (
-          <div style={{background:y.grayBg,borderRadius:10,padding:"0.85rem 1rem",marginBottom:14}}>
-            <div style={{fontSize:11,color:y.text3,marginBottom:8}}>
-              <strong style={{color:y.text2}}>R</strong> Responsable (ejecuta) · <strong style={{color:y.text2}}>A</strong> Aprobador (rinde cuentas) · <strong style={{color:y.text2}}>C</strong> Consultado · <strong style={{color:y.text2}}>I</strong> Informado
-            </div>
-            <div style={{overflowX:"auto"}}>
-              <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,background:y.surface,borderRadius:8}}>
-                <thead>
-                  <tr>
-                    {["EDT","Tarea","R","A","C","I"].map(h => (
-                      <th key={h} style={{textAlign:"left",fontSize:10,fontWeight:800,color:y.text3,textTransform:"uppercase",letterSpacing:.3,padding:"0.5rem 0.5rem",borderBottom:"1px solid "+y.border,whiteSpace:"nowrap"}}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {tareasProyecto.map((t, i) => (
-                    <tr key={t.id} style={{borderBottom:"1px solid "+y.grayBg}}>
-                      <td style={{padding:"0.5rem",fontWeight:800,color:y.text3,fontSize:11}}>{i+1}</td>
-                      <td style={{padding:"0.5rem",color:y.text,maxWidth:200}}>{t.titulo}</td>
-                      <td style={{padding:"0.5rem",color:y.text2,whiteSpace:"nowrap"}}>{t.responsable || "—"}</td>
-                      <td style={{padding:"0.5rem",color:y.text2,whiteSpace:"nowrap"}}>{t.aprobador || "—"}</td>
-                      <td style={{padding:"0.5rem",color:y.text2,maxWidth:180}}>{t.consultados || "—"}</td>
-                      <td style={{padding:"0.5rem",color:y.text2,maxWidth:180}}>{t.informados || "—"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
 
         {tareaForm && (
           <TareaForm
@@ -716,6 +649,31 @@ function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, respon
   const [saving, setSaving] = useState(false);
   const [tab, setTab] = useState("datos"); // datos | comentarios (solo aplica en modo edición)
 
+  // ---- Plan de trabajo capturado al crear proyecto(s) nuevo(s) (solo aplica en modo "agregar") ----
+  // Se guarda en memoria por cada borrador (clave d._key) hasta que se guarde el proyecto;
+  // en ese momento se crea de verdad en proyecto_tareas con el id real del proyecto recién creado.
+  const [draftTareas, setDraftTareas] = useState({}); // { [d._key]: [{id: localId, titulo, ...}] }
+  const [tareaFormDraft, setTareaFormDraft] = useState(null); // null | {mode:"add"} | {mode:"edit", tarea}
+
+  const guardarTareaDraft = (payload) => {
+    const key = current._key;
+    setDraftTareas(map => {
+      const lista = map[key] || [];
+      let nueva;
+      if (tareaFormDraft && tareaFormDraft.mode === "edit") {
+        nueva = lista.map(t => t.id === tareaFormDraft.tarea.id ? { ...t, ...payload } : t);
+      } else {
+        nueva = [...lista, { id: "local_" + Date.now() + "_" + Math.random(), ...payload }];
+      }
+      return { ...map, [key]: nueva };
+    });
+    setTareaFormDraft(null);
+  };
+  const eliminarTareaDraft = (tarea) => {
+    const key = current._key;
+    setDraftTareas(map => ({ ...map, [key]: (map[key] || []).filter(t => t.id !== tarea.id) }));
+  };
+
   // ---- Comentarios / bitácora del proyecto (solo aplica en modo edición) ----
   const [comentarios, setComentarios] = useState([]);
   const [cargandoComentarios, setCargandoComentarios] = useState(false);
@@ -803,11 +761,39 @@ function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, respon
         const { error } = await supabase.from("proyectos").update(payload).eq("id", editProject.id);
         if (error) throw error;
       } else {
-        const rows = drafts.filter(d => d.nombre.trim()).map(normalize);
-        if (!rows.length) { alert("Agrega al menos un proyecto con nombre"); return; }
+        const listos = drafts.filter(d => d.nombre.trim());
+        if (!listos.length) { alert("Agrega al menos un proyecto con nombre"); return; }
         setSaving(true);
-        const { error } = await supabase.from("proyectos").insert(rows);
-        if (error) throw error;
+        for (const d of listos) {
+          const payload = normalize(d);
+          const { data, error } = await supabase.from("proyectos").insert(payload).select();
+          if (error) throw error;
+          const nuevoId = data && data[0] && data[0].id;
+          const tareasDelDraft = draftTareas[d._key] || [];
+          if (nuevoId && tareasDelDraft.length) {
+            try {
+              const filas = tareasDelDraft.map(t => {
+                const { id, depende_id, ...resto } = t;
+                return { proyectoId: nuevoId, ...resto };
+              });
+              const { data: insertadas, error: errT } = await supabase.from("proyecto_tareas").insert(filas).select();
+              if (errT) throw errT;
+              // Segunda pasada: ahora que ya existen ids reales, resolver las dependencias
+              // entre tareas del mismo plan (que antes apuntaban al id temporal en memoria).
+              const mapaIds = {};
+              tareasDelDraft.forEach((t, i) => { if (insertadas[i]) mapaIds[t.id] = insertadas[i].id; });
+              for (let i = 0; i < tareasDelDraft.length; i++) {
+                const original = tareasDelDraft[i];
+                if (original.depende_id && mapaIds[original.depende_id] && insertadas[i]) {
+                  await supabase.from("proyecto_tareas").update({ depende_id: mapaIds[original.depende_id] }).eq("id", insertadas[i].id);
+                }
+              }
+            } catch (eT) {
+              console.warn("El proyecto se creó, pero no se pudo guardar su plan de trabajo:", eT.message || eT);
+              alert("El proyecto se creó, pero no se pudo guardar el plan de trabajo: " + (eT.message || eT));
+            }
+          }
+        }
       }
       onSaved();
     } catch (e) {
@@ -987,6 +973,65 @@ function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, respon
 
             <SectionTitle>Descripción</SectionTitle>
             <textarea value={current.observacion} onChange={e => updateField(active,"observacion",e.target.value)} rows={3} placeholder="Describe el proyecto: qué se va a hacer, notas u observaciones..." style={{...inputStyle,width:"100%",resize:"vertical",fontSize:12.5,lineHeight:1.6}} />
+
+            {!editProject && (
+              <React.Fragment>
+                <SectionTitle>Plan de trabajo (opcional)</SectionTitle>
+                <div style={{fontSize:11.5,color:y.text3,marginBottom:10}}>
+                  Puedes capturar aquí las tareas del plan de trabajo — se guardan junto con {drafts.length > 1 ? "cada proyecto" : "el proyecto"} al hacer clic en "Guardar". También puedes dejarlo vacío por ahora y agregarlas después, seleccionando el proyecto en la tabla.
+                </div>
+
+                {tareaFormDraft && (
+                  <TareaForm
+                    tarea={tareaFormDraft.mode === "edit" ? tareaFormDraft.tarea : null}
+                    tareasProyecto={draftTareas[current._key] || []}
+                    responsables={responsables}
+                    responsablesDisponibles={responsablesDisponibles}
+                    onGuardar={guardarTareaDraft}
+                    onCancelar={() => setTareaFormDraft(null)}
+                  />
+                )}
+                {!tareaFormDraft && (
+                  <Btn sm onClick={() => setTareaFormDraft({mode:"add"})}><i className="ti ti-plus"/> Agregar tarea al plan</Btn>
+                )}
+
+                {(draftTareas[current._key] || []).length > 0 && (
+                  <div style={{marginTop:12,overflowX:"auto"}}>
+                    <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+                      <thead>
+                        <tr style={{background:y.grayBg}}>
+                          {["Tarea","Responsable","Inicio","Entrega","% Avance","Estatus",""].map(h => (
+                            <th key={h} style={{textAlign:"left",fontSize:10,fontWeight:800,color:y.text3,textTransform:"uppercase",letterSpacing:.3,padding:"0.5rem 0.5rem",borderBottom:"1px solid "+y.border,whiteSpace:"nowrap"}}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(draftTareas[current._key] || []).map(t => {
+                          const est = estatusEfectivoTarea(t);
+                          const [estBg, estColor] = TAREA_ESTADO_COLOR[est] || [y.grayBg, y.gray];
+                          return (
+                            <tr key={t.id} style={{borderBottom:"1px solid "+y.grayBg}}>
+                              <td style={{padding:"0.5rem",color:y.text,maxWidth:220}}>{t.titulo}</td>
+                              <td style={{padding:"0.5rem",color:y.text2,whiteSpace:"nowrap"}}>{t.responsable || "—"}</td>
+                              <td style={{padding:"0.5rem",color:y.text2,whiteSpace:"nowrap"}}>{t.fecha_inicio || "—"}</td>
+                              <td style={{padding:"0.5rem",color:y.text2,whiteSpace:"nowrap"}}>{t.fecha_entrega || "—"}</td>
+                              <td style={{padding:"0.5rem"}}>{avanceTarea(t)}%</td>
+                              <td style={{padding:"0.5rem"}}>
+                                <span style={{display:"inline-flex",padding:"3px 9px",borderRadius:20,fontSize:10.5,fontWeight:700,background:estBg,color:estColor,whiteSpace:"nowrap"}}>{est}</span>
+                              </td>
+                              <td style={{padding:"0.5rem",textAlign:"right",whiteSpace:"nowrap"}}>
+                                <button onClick={() => setTareaFormDraft({mode:"edit", tarea:t})} style={{background:"none",border:"none",color:y.text3,cursor:"pointer",padding:3}} title="Editar"><i className="ti ti-pencil" style={{fontSize:13}}/></button>
+                                <button onClick={() => eliminarTareaDraft(t)} style={{background:"none",border:"none",color:y.text3,cursor:"pointer",padding:3}} title="Eliminar"><i className="ti ti-trash" style={{fontSize:13}}/></button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </React.Fragment>
+            )}
 
             {editProject && editProject.actualizado_en && (
               <div style={{fontSize:11,color:y.text3,display:"flex",alignItems:"center",gap:5,marginTop:14}}>

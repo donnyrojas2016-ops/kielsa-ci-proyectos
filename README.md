@@ -48,7 +48,7 @@ Si más adelante se quiere cerrar el hueco de verdad (no solo silenciar el aviso
 - Agregar proyectos (uno o varios a la vez, mismo formulario tipo pestañas que usas en Hallazgos).
 - Editar y eliminar proyectos.
 - Botón "Editar" con Datos del proyecto (secciones Datos generales, Asignación, Fechas y estado, Ticket y archivo, Descripción) y Comentarios — ver sección "Nuevo formulario de proyecto" más abajo.
-- Plan de acción por proyecto (debajo de la tabla, al seleccionarlo): línea de tiempo (Gantt), ruta crítica y **matriz RACI** por tarea, más exportar ese plan a Excel y a PDF — ver sección "Tabla de proyectos y Plan de acción".
+- Plan de acción por proyecto (debajo de la tabla, al seleccionarlo): línea de tiempo (Gantt) y ruta crítica, más exportar ese plan a Excel y a PDF — ver sección "Tabla de proyectos y Plan de acción".
 - Exportar a Excel y a PDF la lista completa de proyectos (botones junto a los filtros).
 
 ## Activar los comentarios (una sola vez en Supabase)
@@ -159,14 +159,14 @@ Junto al botón de Excel hay uno nuevo de **PDF**: descarga exactamente la misma
 
 Rediseñé el formulario de "Agregar/Editar proyecto" con el formato clásico por secciones que me pediste, usando como referencia el Excel que me compartiste. Al editar un proyecto ahora hay dos pestañas:
 
-- **Datos del proyecto** — organizado en secciones: Datos generales (código, categoría, prioridad, nombre), Asignación (área, país, responsable), Fechas y estado (fecha de solicitud, fecha de inicio, vencimiento, estado y avance), Ticket y archivo (ticket, archivo/documento) y Descripción. Abajo del todo se ve un pequeño texto con la fecha y el usuario de la última actualización.
+- **Datos del proyecto** — organizado en secciones: Datos generales (código, categoría, prioridad, nombre), Asignación (área, país, responsable), Fechas y estado (fecha de solicitud, fecha de inicio, vencimiento, estado y avance), Ticket y archivo (ticket, archivo/documento), Descripción y, si estás **agregando** un proyecto nuevo, una sección más al final: **Plan de trabajo (opcional)**.
 - **Comentarios** — la bitácora de comentarios de siempre.
 
-El Cronograma / Plan de acción **ya no vive dentro de este formulario** — se maneja aparte, debajo de la tabla de proyectos, para poder verlo sin tener que abrir un modal (ver la siguiente sección). Al agregar un proyecto nuevo (una o varias a la vez) se ve solo la pestaña "Datos del proyecto"; el Plan de acción se agrega después de crear el proyecto, seleccionándolo en la tabla.
+El Cronograma / Plan de acción de un proyecto **ya existente** ya no vive dentro de este formulario — se maneja aparte, debajo de la tabla de proyectos, seleccionando la fila del proyecto (ver la siguiente sección). Pero al **agregar** un proyecto nuevo, el mismo formulario de "Agregar proyectos" trae ahora una sección "Plan de trabajo (opcional)" donde puedes capturar de una vez las tareas del plan (nombre, responsable, fechas, dependencia, % de avance, estatus) — se guardan junto con el proyecto en cuanto haces clic en "Guardar". Si agregas varios proyectos a la vez (con el botón "Agregar proyecto" de arriba, uno por pestaña), cada uno tiene su propio plan de trabajo independiente. Por supuesto, también puedes dejarlo vacío al crear el proyecto y agregar las tareas después, seleccionándolo en la tabla — ambos caminos llegan al mismo lugar.
 
 ## Tabla de proyectos y Plan de acción
 
-Por pedido tuyo, la pantalla de Proyectos se simplificó: ya no hay vistas de Tarjetas ni Kanban, solo la tabla. Al hacer clic en cualquier fila de la tabla, justo debajo aparece una tarjeta nueva, **"Plan de acción — [nombre del proyecto]"**, con todo el Cronograma de ese proyecto: línea de tiempo (Gantt), ruta crítica, matriz RACI y la tabla de tareas con botones para agregar, editar y eliminar (según tu rol). Hacer clic en la misma fila otra vez, o en el botón "Cerrar" del panel, lo oculta. Seleccionar otro proyecto cambia el panel para mostrar el plan de ese proyecto.
+Por pedido tuyo, la pantalla de Proyectos se simplificó: ya no hay vistas de Tarjetas ni Kanban, solo la tabla. Al hacer clic en cualquier fila de la tabla, justo debajo de esa misma fila se despliega una tarjeta nueva, **"Plan de acción — [nombre del proyecto]"**, con todo el Cronograma de ese proyecto: línea de tiempo (Gantt), ruta crítica y la tabla de tareas con botones para agregar, editar y eliminar (según tu rol). Hacer clic en la misma fila otra vez, o en el botón "Cerrar" del panel, lo oculta. Seleccionar otro proyecto cambia el panel para mostrar el plan de ese proyecto.
 
 Dentro del Plan de acción hay dos botones de exportación propios de ese proyecto:
 
@@ -214,26 +214,11 @@ Tercera mejora del diagnóstico: en el menú lateral hay un ítem nuevo, **Carga
 
 Esta vista **no necesita ninguna tabla ni columna nueva en Supabase** — usa exactamente las mismas tareas del Cronograma que ya se cargan para las alertas y el avance de cada proyecto, solo que agrupadas de otra forma. En cuanto subas el `index.html` de este paquete, "Carga de trabajo" ya funciona.
 
-## Matriz RACI por tarea
+## Matriz RACI (quitada)
 
-Dentro del Plan de acción de cada proyecto, cada tarea tiene su propia mini "matriz RACI" además del Responsable de siempre. Al agregar o editar una tarea vas a ver una sección, "Matriz RACI de la tarea", con tres campos: **Aprobador** (quien rinde cuentas por el resultado — se elige del mismo catálogo de Responsables), **Consultados** (a quién se le pide opinión antes o durante la tarea) e **Informados** (a quién se le avisa del avance o resultado, sin que participe directamente) — estos dos últimos son de texto libre, para poner uno o varios nombres separados por coma.
+Habíamos agregado, dentro del formulario de cada tarea del Plan de acción, los campos Aprobador/Consultados/Informados y un botón "Ver matriz RACI" que los mostraba en una tabla compacta (R/A/C/I). Por pedido tuyo, quité el botón, la tabla y esos tres campos del formulario de tareas — el formulario de tareas se quedó solo con Nombre, Responsable, Depende de, Fechas, % de avance y Estatus.
 
-Para verlos todos juntos sin tener que abrir tarea por tarea, arriba de la tabla de tareas hay un botón **"Ver matriz RACI"** que despliega una tabla compacta con una fila por tarea y una columna por cada letra (R/A/C/I), con su leyenda arriba. Esto responde a lo que piden los estándares de gestión de proyectos sobre roles y responsabilidades claras: quién ejecuta (R, el Responsable de siempre) no tiene por qué ser lo mismo que quién aprueba (A), y ambos son distintos de a quién solo se consulta o se informa.
-
-### Activar la matriz RACI (una sola vez en Supabase)
-
-Estas son columnas nuevas en la tabla `proyecto_tareas` que ya existe y ya funciona, así que **no hace falta tocar permisos ni RLS**:
-
-1. Entra a supabase.com → tu proyecto → **SQL Editor** → **New query**.
-2. Pega y ejecuta (botón **Run**) exactamente esto:
-
-```sql
-alter table proyecto_tareas add column if not exists aprobador text;
-alter table proyecto_tareas add column if not exists consultados text;
-alter table proyecto_tareas add column if not exists informados text;
-```
-
-3. Listo. En cuanto subas el `index.html` de este paquete, el formulario de tareas ya muestra los campos de Aprobador/Consultados/Informados, y el botón "Ver matriz RACI" ya funciona.
+Si ya habías corrido el SQL que agregaba las columnas `aprobador`, `consultados` e `informados` a `proyecto_tareas`, no hace falta que las borres — se quedan sin usarse, sin ningún efecto sobre el resto de la app (igual que con Presupuesto/Gasto real y las tablas de Riesgos/Interesados/Cambios).
 
 ## Riesgos, Interesados e Historial de cambios (quitados)
 
@@ -304,3 +289,9 @@ Con la separación de Reportes probé, con capturas de pantalla: que al entrar l
 Con el logo y el rediseño del login probé, con capturas de pantalla: que el logo de Kielsa se vea en la pantalla de login (arriba de "Kielsa CI — Proyectos") y en el encabezado de la app ya adentro; que el fondo, la tarjeta, los campos y el botón "Entrar →" tengan el mismo estilo que la app principal de Kielsa CI; que "Desarrollado por Donny Rojas" se vea debajo del botón "Entrar →" en el login y también como pie de página después de iniciar sesión; y que escribir una clave incorrecta muestre el aviso rojo "Usuario y clave incorrectas" con el mismo estilo que en Kielsa CI. Todo sin errores de consola.
 
 Con el rediseño de la tabla y el Plan de acción probé, con capturas de pantalla: que la pantalla de Proyectos muestre solo la tabla (sin botones de Tarjetas ni Kanban); que hacer clic en una fila la resalte y despliegue debajo la tarjeta "Plan de acción — [nombre]" con el Gantt, la ruta crítica, la tabla de tareas y el avance general; que el botón "Ver matriz RACI" del panel muestre y oculte la tabla RACI correctamente; que agregar una tarea nueva desde el panel la refleje de inmediato en el Gantt, en la tabla de tareas, y también actualice el % de avance y el conteo de tareas de esa fila en la tabla de proyectos; que seleccionar un segundo proyecto cambie el panel para mostrar su propio plan (sin mezclar tareas de otro proyecto); que hacer clic en la misma fila otra vez, o en "Cerrar", oculte el panel; que los botones "Excel" y "PDF" del panel descarguen el cronograma de ese proyecto (nombre del proyecto + tabla de tareas) sin errores; y que el botón "Editar" siga abriendo el formulario, ahora con solo dos pestañas (Datos del proyecto y Comentarios) y sin rastro de Riesgos, Interesados ni Historial de cambios. Todo sin errores de consola.
+
+**Corrección reportada en producción (26 de agosto de 2026):** con tus 35 proyectos reales, el panel del Plan de acción sí se generaba al seleccionar una fila (sin errores en consola, confirmado con tu captura de las DevTools), pero aparecía hasta el final de toda la tabla — había que hacer scroll pasando las otras filas para verlo, así que parecía que no pasaba nada. Lo corregí para que el panel se despliegue **inmediatamente debajo de la fila seleccionada** en vez de al final de la tabla. Lo probé simulando una tabla de 10 proyectos con un viewport chico (para forzar que hubiera scroll de por medio) y confirmé, con captura de pantalla, que el panel aparece pegado a la fila que se seleccionó — sin importar la posición — sin necesidad de hacer scroll. Todo sin errores de consola.
+
+Después quitaste la matriz RACI: probé que el formulario de una tarea (tanto en el Plan de acción de un proyecto existente como en el nuevo "Plan de trabajo" al agregar un proyecto) ya no muestre los campos Aprobador/Consultados/Informados; que el botón "Ver matriz RACI" y su tabla compacta ya no aparezcan en el panel del Plan de acción; y que el resto del plan (Gantt, ruta crítica, tabla de tareas, exportar a Excel/PDF) siga funcionando exactamente igual. Todo sin errores de consola.
+
+Con el nuevo "Plan de trabajo (opcional)" al agregar un proyecto probé, con capturas de pantalla: abrir "Agregar proyecto", escribir el nombre, hacer clic en "Agregar tarea al plan" y capturar una tarea (sin guardarla todavía en Supabase, solo en memoria) — se ve de inmediato en una tabla debajo, con opción de editarla o quitarla antes de guardar; hacer clic en "Guardar" y confirmar que el proyecto se crea Y la tarea se guarda de verdad en la base de datos con el id real del proyecto recién creado (no un id temporal); y que al seleccionar ese proyecto nuevo en la tabla, su Plan de acción ya muestre esa misma tarea, con su EDT, su % de avance y su estatus correctos. Todo sin errores de consola.
