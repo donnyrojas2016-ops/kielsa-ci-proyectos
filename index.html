@@ -74,59 +74,6 @@ const TAREA_ESTADO_COLOR = {
   "Vencida": [y.dangerBg, y.danger]
 };
 
-/* ---------- Registro de riesgos ---------- */
-const RIESGO_PROBABILIDADES = ["Baja","Media","Alta"];
-const RIESGO_IMPACTOS = ["Bajo","Medio","Alto"];
-const RIESGO_ESTADOS = ["Abierto","Mitigado","Cerrado","Ocurrió"];
-const RIESGO_ESTADO_COLOR = {
-  "Abierto": [y.dangerBg, y.danger],
-  "Mitigado": [y.warningBg, y.warning],
-  "Cerrado": [y.successBg, y.success],
-  "Ocurrió": [y.grayBg, y.gray]
-};
-const RIESGO_PROB_VAL = { "Baja":1, "Media":2, "Alta":3 };
-const RIESGO_IMPACTO_VAL = { "Bajo":1, "Medio":2, "Alto":3 };
-
-// Nivel de un riesgo (matriz clásica probabilidad × impacto, 1 a 9):
-// 1-2 Bajo, 3-4 Medio, 6-9 Alto. Es la forma estándar de priorizar riesgos
-// sin tener que discutir cada caso a mano.
-function nivelRiesgo(probabilidad, impacto) {
-  const p = RIESGO_PROB_VAL[probabilidad] || 1;
-  const im = RIESGO_IMPACTO_VAL[impacto] || 1;
-  const score = p * im;
-  const nivel = score <= 2 ? "Bajo" : score <= 4 ? "Medio" : "Alto";
-  return { score, nivel };
-}
-const RIESGO_NIVEL_COLOR = {
-  "Bajo": [y.successBg, y.success],
-  "Medio": [y.warningBg, y.warning],
-  "Alto": [y.dangerBg, y.danger]
-};
-
-/* ---------- Registro de interesados (stakeholders) ---------- */
-const INTERESADO_TIPOS = ["Interno","Externo"];
-const INTERESADO_INFLUENCIAS = ["Baja","Media","Alta"];
-const INTERESADO_INTERESES = ["Bajo","Medio","Alto"];
-
-// Estrategia de gestión según la matriz clásica de poder/interés (Mendelow) que usa PMBOK
-// para priorizar a quién atender de cerca y a quién basta con monitorear. Se trata como
-// "alta" solo la influencia/interés marcados "Alta"/"Alto"; cualquier otro valor cuenta
-// como "no alta", que es como se lee esta matriz en la práctica (2x2, no una escala fina).
-function estrategiaInteresado(influencia, interes) {
-  const influenciaAlta = influencia === "Alta";
-  const interesAlto = interes === "Alto";
-  if (influenciaAlta && interesAlto) return "Gestionar de cerca";
-  if (influenciaAlta && !interesAlto) return "Mantener satisfecho";
-  if (!influenciaAlta && interesAlto) return "Mantener informado";
-  return "Monitorear";
-}
-const ESTRATEGIA_INTERESADO_COLOR = {
-  "Gestionar de cerca": [y.dangerBg, y.danger],
-  "Mantener satisfecho": [y.warningBg, y.warning],
-  "Mantener informado": [y.primaryLight, y.primary],
-  "Monitorear": [y.grayBg, y.gray]
-};
-
 /* ---------- Carga de trabajo ---------- */
 // Nivel de carga según cuántas tareas activas (no completadas) tiene una persona
 // en TODOS los proyectos a la vez. 1-2: Baja. 3-5: Media. 6+: Alta.
@@ -139,35 +86,6 @@ function nivelCarga(activas) {
   if (activas <= 2) return "Baja";
   if (activas <= 5) return "Media";
   return "Alta";
-}
-
-/* ---------- Registro de cambios ---------- */
-// Campos del proyecto que se vigilan para el historial de cambios. Cuando alguno
-// de estos cambia al guardar, se registra automáticamente quién lo cambió, cuándo,
-// y cuál era el valor antes y después — sin que la persona tenga que hacer nada extra.
-function nombrePaisPorId(paises, id) {
-  if (!id) return "";
-  const p = (paises || []).find(x => x.id === parseInt(id));
-  return p ? p.nombre : "";
-}
-const CAMBIOS_CAMPOS = [
-  { key:"nombre", label:"Nombre" },
-  { key:"categoria", label:"Categoría" },
-  { key:"prioridad", label:"Prioridad", formato: v => v==1 ? "Alta" : v==2 ? "Media" : "Normal" },
-  { key:"area", label:"Área" },
-  { key:"pais_id", label:"País", formatoConPaises: (v, paises) => nombrePaisPorId(paises, v) },
-  { key:"responsable", label:"Responsable" },
-  { key:"estado", label:"Estado" },
-  { key:"fecha_solicitud", label:"Fecha de solicitud" },
-  { key:"fecha_inicio", label:"Fecha de inicio" },
-  { key:"fecha_fin", label:"Vencimiento" },
-  { key:"ticket", label:"Ticket" }
-];
-function formatValorCambio(campo, valor, paises) {
-  if (valor === null || valor === undefined || valor === "") return "—";
-  if (campo.formatoConPaises) return campo.formatoConPaises(valor, paises) || "—";
-  if (campo.formato) return campo.formato(valor);
-  return String(valor);
 }
 
 // % de avance de una tarea individual: usa la columna nueva "porcentaje_avance" si existe;
@@ -575,177 +493,228 @@ function TareaForm({ tarea, tareasProyecto, responsables, responsablesDisponible
   );
 }
 
-/* ---------- Formulario de un riesgo del proyecto (agregar o editar) ---------- */
-function RiesgoForm({ riesgo, responsables, responsablesDisponibles, onGuardar, onCancelar }) {
-  const [nombre, setNombre] = useState(riesgo ? riesgo.nombre || "" : "");
-  const [probabilidad, setProbabilidad] = useState(riesgo ? riesgo.probabilidad || "Media" : "Media");
-  const [impacto, setImpacto] = useState(riesgo ? riesgo.impacto || "Medio" : "Medio");
-  const [responsable, setResponsable] = useState(riesgo ? riesgo.responsable || "" : "");
-  const [mitigacion, setMitigacion] = useState(riesgo ? riesgo.mitigacion || "" : "");
-  const [estado, setEstado] = useState(riesgo ? riesgo.estado || "Abierto" : "Abierto");
-
-  const guardar = () => {
-    if (!nombre.trim()) { alert("La descripción del riesgo es obligatoria."); return; }
-    onGuardar({
-      nombre: nombre.trim(),
-      probabilidad,
-      impacto,
-      responsable: responsable || null,
-      mitigacion: mitigacion.trim() || null,
-      estado
-    });
-  };
-
-  return (
-    <div style={{background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:10,padding:"0.9rem 1rem",marginBottom:12}}>
-      <div style={{marginBottom:10}}>
-        <label style={{...labelStyle,color:"#c2410c"}}>Riesgo *</label>
-        <input autoFocus value={nombre} onChange={e => setNombre(e.target.value)} placeholder="Ej: El proveedor podría no entregar el ambiente de pruebas a tiempo" style={{...inputStyle,fontSize:12.5}} />
-      </div>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:10}}>
-        <div>
-          <label style={{...labelStyle,color:"#c2410c"}}>Probabilidad</label>
-          <select value={probabilidad} onChange={e => setProbabilidad(e.target.value)} style={{...inputStyle,fontSize:12.5}}>
-            {RIESGO_PROBABILIDADES.map(p => <option key={p}>{p}</option>)}
-          </select>
-        </div>
-        <div>
-          <label style={{...labelStyle,color:"#c2410c"}}>Impacto</label>
-          <select value={impacto} onChange={e => setImpacto(e.target.value)} style={{...inputStyle,fontSize:12.5}}>
-            {RIESGO_IMPACTOS.map(im => <option key={im}>{im}</option>)}
-          </select>
-        </div>
-        <div>
-          <label style={{...labelStyle,color:"#c2410c"}}>Estado</label>
-          <select value={estado} onChange={e => setEstado(e.target.value)} style={{...inputStyle,fontSize:12.5}}>
-            {RIESGO_ESTADOS.map(e => <option key={e}>{e}</option>)}
-          </select>
-        </div>
-      </div>
-      <div style={{marginBottom:10}}>
-        <label style={{...labelStyle,color:"#c2410c"}}>Responsable de darle seguimiento</label>
-        {responsablesDisponibles && responsables && responsables.length > 0 ? (
-          <select value={responsable} onChange={e => setResponsable(e.target.value)} style={{...inputStyle,fontSize:12.5}}>
-            <option value="">—</option>
-            {responsable && !responsables.some(r => r.nombre === responsable) && <option value={responsable}>{responsable}</option>}
-            {responsables.map(r => <option key={r.id} value={r.nombre}>{r.nombre}</option>)}
-          </select>
-        ) : (
-          <input value={responsable} onChange={e => setResponsable(e.target.value)} style={{...inputStyle,fontSize:12.5}} />
-        )}
-      </div>
-      <div style={{marginBottom:12}}>
-        <label style={{...labelStyle,color:"#c2410c"}}>Plan de mitigación</label>
-        <textarea value={mitigacion} onChange={e => setMitigacion(e.target.value)} rows={2} placeholder="¿Qué se va a hacer para reducir la probabilidad o el impacto de este riesgo?" style={{...inputStyle,fontSize:12.5,resize:"vertical"}} />
-      </div>
-      <div style={{display:"flex",justifyContent:"flex-end",gap:8}}>
-        <Btn sm onClick={onCancelar}>Cancelar</Btn>
-        <Btn sm primary onClick={guardar}>{riesgo ? "Guardar cambios" : "Agregar riesgo"}</Btn>
-      </div>
-    </div>
-  );
-}
-
-/* ---------- Formulario de un interesado del proyecto (agregar o editar) ---------- */
-function InteresadoForm({ interesado, onGuardar, onCancelar }) {
-  const [nombre, setNombre] = useState(interesado ? interesado.nombre || "" : "");
-  const [tipo, setTipo] = useState(interesado ? interesado.tipo || "Interno" : "Interno");
-  const [rol, setRol] = useState(interesado ? interesado.rol || "" : "");
-  const [influencia, setInfluencia] = useState(interesado ? interesado.influencia || "Media" : "Media");
-  const [interes, setInteres] = useState(interesado ? interesado.interes || "Medio" : "Medio");
-  const [contacto, setContacto] = useState(interesado ? interesado.contacto || "" : "");
-  const [notas, setNotas] = useState(interesado ? interesado.notas || "" : "");
-
-  const guardar = () => {
-    if (!nombre.trim()) { alert("El nombre del interesado es obligatorio."); return; }
-    onGuardar({
-      nombre: nombre.trim(),
-      tipo,
-      rol: rol.trim() || null,
-      influencia,
-      interes,
-      contacto: contacto.trim() || null,
-      notas: notas.trim() || null
-    });
-  };
-
-  return (
-    <div style={{background:"#f0fdfa",border:"1px solid #99f6e4",borderRadius:10,padding:"0.9rem 1rem",marginBottom:12}}>
-      <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:10,marginBottom:10}}>
-        <div>
-          <label style={{...labelStyle,color:"#0f766e"}}>Interesado *</label>
-          <input autoFocus value={nombre} onChange={e => setNombre(e.target.value)} placeholder="Ej: Gerencia Financiera, Auditoría Interna, Proveedor SAP..." style={{...inputStyle,fontSize:12.5}} />
-        </div>
-        <div>
-          <label style={{...labelStyle,color:"#0f766e"}}>Tipo</label>
-          <select value={tipo} onChange={e => setTipo(e.target.value)} style={{...inputStyle,fontSize:12.5}}>
-            {INTERESADO_TIPOS.map(t => <option key={t}>{t}</option>)}
-          </select>
-        </div>
-      </div>
-      <div style={{marginBottom:10}}>
-        <label style={{...labelStyle,color:"#0f766e"}}>Rol / relación con el proyecto</label>
-        <input value={rol} onChange={e => setRol(e.target.value)} placeholder="Ej: Aprueba el presupuesto, usa el sistema a diario..." style={{...inputStyle,fontSize:12.5}} />
-      </div>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:10}}>
-        <div>
-          <label style={{...labelStyle,color:"#0f766e"}}>Influencia (poder)</label>
-          <select value={influencia} onChange={e => setInfluencia(e.target.value)} style={{...inputStyle,fontSize:12.5}}>
-            {INTERESADO_INFLUENCIAS.map(i => <option key={i}>{i}</option>)}
-          </select>
-        </div>
-        <div>
-          <label style={{...labelStyle,color:"#0f766e"}}>Interés</label>
-          <select value={interes} onChange={e => setInteres(e.target.value)} style={{...inputStyle,fontSize:12.5}}>
-            {INTERESADO_INTERESES.map(i => <option key={i}>{i}</option>)}
-          </select>
-        </div>
-        <div>
-          <label style={{...labelStyle,color:"#0f766e"}}>Contacto</label>
-          <input value={contacto} onChange={e => setContacto(e.target.value)} placeholder="Correo o teléfono (opcional)" style={{...inputStyle,fontSize:12.5}} />
-        </div>
-      </div>
-      <div style={{marginBottom:12}}>
-        <label style={{...labelStyle,color:"#0f766e"}}>Notas de la estrategia de gestión</label>
-        <textarea value={notas} onChange={e => setNotas(e.target.value)} rows={2} placeholder="¿Cómo se le va a mantener informado, satisfecho o involucrado?" style={{...inputStyle,fontSize:12.5,resize:"vertical"}} />
-      </div>
-      <div style={{display:"flex",justifyContent:"flex-end",gap:8}}>
-        <Btn sm onClick={onCancelar}>Cancelar</Btn>
-        <Btn sm primary onClick={guardar}>{interesado ? "Guardar cambios" : "Agregar interesado"}</Btn>
-      </div>
-    </div>
-  );
-}
-
-function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, responsables, responsablesDisponibles, editProject, onClose, onSaved, onTareasChanged }) {
-  const [drafts, setDrafts] = useState(() => editProject ? [{ ...editProject }] : [nuevoProyecto()]);
-  const [active, setActive] = useState(0);
-  const [saving, setSaving] = useState(false);
-  const [tab, setTab] = useState("datos"); // datos | cronograma | riesgos | comentarios (solo aplica en modo edición)
-
-  // ---- Tareas / Cronograma del proyecto (solo aplica en modo edición, sobre un proyecto ya guardado) ----
-  const [tareasProyecto, setTareasProyecto] = useState([]);
-  const [cargandoTareas, setCargandoTareas] = useState(false);
-  const [tareasDisponibles, setTareasDisponibles] = useState(true);
+/* ---------- Plan de acción (Cronograma) del proyecto seleccionado ---------- */
+function PlanAccionPanel({ proyecto, tareasProyecto, responsables, responsablesDisponibles, puedeEditar, onTareasChanged, onClose }) {
+  const [cargando, setCargando] = useState(false);
   const [tareaForm, setTareaForm] = useState(null); // null | {mode:"add"} | {mode:"edit", tarea}
   const [mostrarRaci, setMostrarRaci] = useState(false);
 
-  // ---- Riesgos del proyecto (solo aplica en modo edición) ----
-  const [riesgosProyecto, setRiesgosProyecto] = useState([]);
-  const [cargandoRiesgos, setCargandoRiesgos] = useState(false);
-  const [riesgosDisponibles, setRiesgosDisponibles] = useState(true);
-  const [riesgoForm, setRiesgoForm] = useState(null); // null | {mode:"add"} | {mode:"edit", riesgo}
+  const rutaCritica = useMemo(() => calcularRutaCritica(tareasProyecto), [tareasProyecto]);
+  const avancePctTareas = tareasProyecto.length ? Math.round(tareasProyecto.reduce((s,t) => s + avanceTarea(t), 0) / tareasProyecto.length) : 0;
 
-  // ---- Interesados del proyecto (solo aplica en modo edición) ----
-  const [interesadosProyecto, setInteresadosProyecto] = useState([]);
-  const [cargandoInteresados, setCargandoInteresados] = useState(false);
-  const [interesadosDisponibles, setInteresadosDisponibles] = useState(true);
-  const [interesadoForm, setInteresadoForm] = useState(null); // null | {mode:"add"} | {mode:"edit", interesado}
+  const guardarTarea = async (payload) => {
+    setCargando(true);
+    try {
+      if (tareaForm && tareaForm.mode === "edit") {
+        const { error } = await supabase.from("proyecto_tareas").update(payload).eq("id", tareaForm.tarea.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("proyecto_tareas").insert({ proyectoId: proyecto.id, ...payload });
+        if (error) throw error;
+      }
+      setTareaForm(null);
+      await onTareasChanged();
+    } catch (e) {
+      alert("No se pudo guardar la tarea: " + (e.message || e) + (/column/i.test(e.message||"") ? "\n\n(Puede que falte correr el SQL del Cronograma en Supabase — ver README.)" : ""));
+    } finally {
+      setCargando(false);
+    }
+  };
 
-  // ---- Registro de cambios del proyecto (solo lectura, se llena solo al guardar) ----
-  const [cambiosProyecto, setCambiosProyecto] = useState([]);
-  const [cargandoCambios, setCargandoCambios] = useState(false);
-  const [cambiosDisponibles, setCambiosDisponibles] = useState(true);
+  const eliminarTarea = async (tarea) => {
+    if (!window.confirm('¿Eliminar la tarea "' + tarea.titulo + '"?')) return;
+    setCargando(true);
+    try {
+      const { error } = await supabase.from("proyecto_tareas").delete().eq("id", tarea.id);
+      if (error) throw error;
+      await onTareasChanged();
+    } catch (e) {
+      alert("No se pudo eliminar la tarea: " + (e.message || e));
+    } finally {
+      setCargando(false);
+    }
+  };
+
+  const nombreArchivoBase = (proyecto.codigo || proyecto.nombre || "proyecto").toString().replace(/[^\w\-]+/g,"_").substring(0,40);
+
+  const exportarPlanExcel = () => {
+    const filas = [
+      ["Proyecto", proyecto.nombre || ""],
+      ["Código", proyecto.codigo || ""],
+      []
+    ];
+    filas.push(["EDT","Tarea","Responsable","Inicio","Entrega","% Avance","Estatus"]);
+    tareasProyecto.forEach((t,i) => filas.push([i+1, t.titulo, t.responsable||"", t.fecha_inicio||"", t.fecha_entrega||"", avanceTarea(t), estatusEfectivoTarea(t)]));
+    const ws = XLSX.utils.aoa_to_sheet(filas);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Cronograma");
+    XLSX.writeFile(wb, "Cronograma_" + nombreArchivoBase + ".xlsx");
+  };
+
+  const exportarPlanPDF = () => {
+    const doc = new window.jspdf.jsPDF({ orientation: "landscape" });
+    doc.setFontSize(14);
+    doc.text(proyecto.nombre || "Plan de acción", 14, 15);
+    doc.setFontSize(9);
+    doc.setTextColor(120);
+    doc.text("Generado el " + new Date().toLocaleDateString("es-HN") + " · " + tareasProyecto.length + " tarea(s) · Avance general " + avancePctTareas + "%", 14, 21);
+    const filas = tareasProyecto.map((t,i) => [i+1, t.titulo, t.responsable||"", t.fecha_inicio||"", t.fecha_entrega||"", avanceTarea(t)+"%", estatusEfectivoTarea(t)]);
+    doc.autoTable({
+      head: [["EDT","Tarea","Responsable","Inicio","Entrega","Avance","Estatus"]],
+      body: filas,
+      startY: 26,
+      styles: { fontSize: 8, cellPadding: 2 },
+      headStyles: { fillColor: [30, 77, 183] },
+      margin: { left: 14, right: 14 }
+    });
+    doc.save("Plan_" + nombreArchivoBase + ".pdf");
+  };
+
+  return (
+    <Card>
+      <CardHeader
+        icon="ti-list-check"
+        left={"Plan de acción — " + (proyecto.nombre || "")}
+        right={
+          <React.Fragment>
+            <Btn sm onClick={exportarPlanExcel}><i className="ti ti-file-spreadsheet"/> Excel</Btn>
+            <Btn sm onClick={exportarPlanPDF}><i className="ti ti-file-type-pdf"/> PDF</Btn>
+            <Btn sm onClick={onClose}><i className="ti ti-x"/> Cerrar</Btn>
+          </React.Fragment>
+        }
+      />
+      <div style={{padding:"1rem 1.1rem"}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,gap:8,flexWrap:"wrap"}}>
+          <span style={{fontSize:12.5,fontWeight:700,color:y.text}}>{tareasProyecto.length} {tareasProyecto.length===1?"tarea":"tareas"}</span>
+          {puedeEditar && (
+            <div style={{display:"flex",gap:8}}>
+              {tareasProyecto.length > 0 && (
+                <Btn sm onClick={() => setMostrarRaci(v => !v)}><i className="ti ti-table"/> {mostrarRaci ? "Ocultar" : "Ver"} matriz RACI</Btn>
+              )}
+              {!tareaForm && <Btn sm primary onClick={() => setTareaForm({mode:"add"})}><i className="ti ti-plus"/> Agregar tarea</Btn>}
+            </div>
+          )}
+        </div>
+
+        {mostrarRaci && tareasProyecto.length > 0 && (
+          <div style={{background:y.grayBg,borderRadius:10,padding:"0.85rem 1rem",marginBottom:14}}>
+            <div style={{fontSize:11,color:y.text3,marginBottom:8}}>
+              <strong style={{color:y.text2}}>R</strong> Responsable (ejecuta) · <strong style={{color:y.text2}}>A</strong> Aprobador (rinde cuentas) · <strong style={{color:y.text2}}>C</strong> Consultado · <strong style={{color:y.text2}}>I</strong> Informado
+            </div>
+            <div style={{overflowX:"auto"}}>
+              <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,background:y.surface,borderRadius:8}}>
+                <thead>
+                  <tr>
+                    {["EDT","Tarea","R","A","C","I"].map(h => (
+                      <th key={h} style={{textAlign:"left",fontSize:10,fontWeight:800,color:y.text3,textTransform:"uppercase",letterSpacing:.3,padding:"0.5rem 0.5rem",borderBottom:"1px solid "+y.border,whiteSpace:"nowrap"}}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {tareasProyecto.map((t, i) => (
+                    <tr key={t.id} style={{borderBottom:"1px solid "+y.grayBg}}>
+                      <td style={{padding:"0.5rem",fontWeight:800,color:y.text3,fontSize:11}}>{i+1}</td>
+                      <td style={{padding:"0.5rem",color:y.text,maxWidth:200}}>{t.titulo}</td>
+                      <td style={{padding:"0.5rem",color:y.text2,whiteSpace:"nowrap"}}>{t.responsable || "—"}</td>
+                      <td style={{padding:"0.5rem",color:y.text2,whiteSpace:"nowrap"}}>{t.aprobador || "—"}</td>
+                      <td style={{padding:"0.5rem",color:y.text2,maxWidth:180}}>{t.consultados || "—"}</td>
+                      <td style={{padding:"0.5rem",color:y.text2,maxWidth:180}}>{t.informados || "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {tareaForm && (
+          <TareaForm
+            tarea={tareaForm.mode === "edit" ? tareaForm.tarea : null}
+            tareasProyecto={tareasProyecto}
+            responsables={responsables}
+            responsablesDisponibles={responsablesDisponibles}
+            onGuardar={guardarTarea}
+            onCancelar={() => setTareaForm(null)}
+          />
+        )}
+
+        {tareasProyecto.length === 0 ? (
+          <div style={{fontSize:12,color:y.text3,padding:"1rem 0"}}>Sin tareas todavía{puedeEditar ? " — agrega la primera con el botón de arriba." : "."}</div>
+        ) : (
+          <React.Fragment>
+          <GanttChart tareas={tareasProyecto} criticalSet={rutaCritica} />
+          <div style={{overflowX:"auto"}}>
+            <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+              <thead>
+                <tr style={{background:y.grayBg}}>
+                  {["EDT","Tarea","Responsable","Depende de","Inicio","Entrega","Días","% Avance","Estatus",""].map(h => (
+                    <th key={h} style={{textAlign:"left",fontSize:10,fontWeight:800,color:y.text3,textTransform:"uppercase",letterSpacing:.3,padding:"0.5rem 0.5rem",borderBottom:"1px solid "+y.border,whiteSpace:"nowrap"}}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {tareasProyecto.map((t, i) => {
+                  const est = estatusEfectivoTarea(t);
+                  const [estBg, estColor] = TAREA_ESTADO_COLOR[est] || [y.grayBg, y.gray];
+                  const dias = duracionDias(t.fecha_inicio, t.fecha_entrega);
+                  const dep = t.depende_id ? tareasProyecto.findIndex(x => x.id === t.depende_id) : -1;
+                  const pct = avanceTarea(t);
+                  const critica = rutaCritica.has(t.id);
+                  return (
+                    <tr key={t.id} style={{borderBottom:"1px solid "+y.grayBg}}>
+                      <td style={{padding:"0.5rem",fontWeight:800,color:y.text3,fontSize:11}}>{i+1}</td>
+                      <td style={{padding:"0.5rem",color:y.text,maxWidth:220}}>
+                        {critica && <i className="ti ti-alert-triangle" style={{color:y.danger,fontSize:12,marginRight:5}} title="Ruta crítica"/>}
+                        {t.titulo}
+                      </td>
+                      <td style={{padding:"0.5rem",color:y.text2,whiteSpace:"nowrap"}}>{t.responsable || "—"}</td>
+                      <td style={{padding:"0.5rem",color:y.text3,whiteSpace:"nowrap"}}>{dep >= 0 ? "EDT " + (dep+1) : "—"}</td>
+                      <td style={{padding:"0.5rem",color:y.text2,whiteSpace:"nowrap"}}>{t.fecha_inicio || "—"}</td>
+                      <td style={{padding:"0.5rem",color:y.text2,whiteSpace:"nowrap"}}>{t.fecha_entrega || "—"}</td>
+                      <td style={{padding:"0.5rem",color:y.text2}}>{dias!=null ? dias : "—"}</td>
+                      <td style={{padding:"0.5rem",whiteSpace:"nowrap"}}>
+                        <span style={{display:"inline-block",width:44,height:6,borderRadius:20,background:y.border,position:"relative",marginRight:6,verticalAlign:"middle"}}>
+                          <span style={{position:"absolute",left:0,top:0,bottom:0,borderRadius:20,background:y.primary,width:pct+"%"}}/>
+                        </span>
+                        {pct}%
+                      </td>
+                      <td style={{padding:"0.5rem"}}>
+                        <span style={{display:"inline-flex",padding:"3px 9px",borderRadius:20,fontSize:10.5,fontWeight:700,background:estBg,color:estColor,whiteSpace:"nowrap"}}>{est}</span>
+                      </td>
+                      <td style={{padding:"0.5rem",textAlign:"right",whiteSpace:"nowrap"}}>
+                        {puedeEditar && (
+                          <React.Fragment>
+                            <button onClick={() => setTareaForm({mode:"edit", tarea:t})} style={{background:"none",border:"none",color:y.text3,cursor:"pointer",padding:3}} title="Editar"><i className="ti ti-pencil" style={{fontSize:13}}/></button>
+                            <button onClick={() => eliminarTarea(t)} style={{background:"none",border:"none",color:y.text3,cursor:"pointer",padding:3}} title="Eliminar"><i className="ti ti-trash" style={{fontSize:13}}/></button>
+                          </React.Fragment>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          </React.Fragment>
+        )}
+
+        {tareasProyecto.length > 0 && (
+          <div style={{background:y.primaryLight,borderRadius:10,padding:"0.75rem 1rem",marginTop:14,display:"flex",alignItems:"center",gap:12,fontSize:12.5,color:y.text2}}>
+            <i className="ti ti-chart-bar" style={{color:y.primary}}/>
+            Avance general del proyecto (promedio de {tareasProyecto.length} {tareasProyecto.length===1?"tarea":"tareas"}):
+            <strong style={{color:y.primary}}>{avancePctTareas}%</strong>
+          </div>
+        )}
+      </div>
+    </Card>
+  );
+}
+
+function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, responsables, responsablesDisponibles, editProject, onClose, onSaved }) {
+  const [drafts, setDrafts] = useState(() => editProject ? [{ ...editProject }] : [nuevoProyecto()]);
+  const [active, setActive] = useState(0);
+  const [saving, setSaving] = useState(false);
+  const [tab, setTab] = useState("datos"); // datos | comentarios (solo aplica en modo edición)
 
   // ---- Comentarios / bitácora del proyecto (solo aplica en modo edición) ----
   const [comentarios, setComentarios] = useState([]);
@@ -753,200 +722,6 @@ function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, respon
   const [comentariosDisponibles, setComentariosDisponibles] = useState(true);
   const [nuevoComentario, setNuevoComentario] = useState("");
   const [enviandoComentario, setEnviandoComentario] = useState(false);
-
-  useEffect(() => {
-    if (!editProject) return;
-    (async () => {
-      setCargandoTareas(true);
-      try {
-        const { data, error } = await supabase.from("proyecto_tareas").select("*").eq("proyectoId", editProject.id).order("id");
-        if (error) throw error;
-        setTareasProyecto(data || []);
-        setTareasDisponibles(true);
-      } catch (e) {
-        console.warn("Tabla proyecto_tareas no disponible:", e.message || e);
-        setTareasDisponibles(false);
-      } finally {
-        setCargandoTareas(false);
-      }
-    })();
-  }, [editProject]);
-
-  const guardarTarea = async (payload) => {
-    try {
-      if (tareaForm && tareaForm.mode === "edit") {
-        const { error } = await supabase.from("proyecto_tareas").update(payload).eq("id", tareaForm.tarea.id);
-        if (error) throw error;
-        setTareasProyecto(list => list.map(t => t.id === tareaForm.tarea.id ? { ...t, ...payload } : t));
-      } else {
-        const { data, error } = await supabase.from("proyecto_tareas").insert({ proyectoId: editProject.id, ...payload }).select();
-        if (error) throw error;
-        setTareasProyecto(list => [...list, ...(data || [])]);
-      }
-      setTareaForm(null);
-      onTareasChanged && onTareasChanged();
-    } catch (e) {
-      alert("No se pudo guardar la tarea: " + (e.message || e) + (/column/i.test(e.message||"") ? "\n\n(Puede que falte correr el SQL del Cronograma en Supabase — ver README.)" : ""));
-    }
-  };
-
-  const eliminarTarea = async (tarea) => {
-    if (!window.confirm('¿Eliminar la tarea "' + tarea.titulo + '"?')) return;
-    setTareasProyecto(list => list.filter(t => t.id !== tarea.id));
-    try {
-      const { error } = await supabase.from("proyecto_tareas").delete().eq("id", tarea.id);
-      if (error) throw error;
-      onTareasChanged && onTareasChanged();
-    } catch (e) {
-      alert("No se pudo eliminar la tarea: " + (e.message || e));
-      setTareasProyecto(list => [...list, tarea]);
-    }
-  };
-
-  const avancePctTareas = tareasProyecto.length ? Math.round(tareasProyecto.reduce((s,t) => s + avanceTarea(t), 0) / tareasProyecto.length) : 0;
-  const rutaCritica = useMemo(() => calcularRutaCritica(tareasProyecto), [tareasProyecto]);
-
-  useEffect(() => {
-    if (!editProject) return;
-    (async () => {
-      setCargandoRiesgos(true);
-      try {
-        const { data, error } = await supabase.from("proyecto_riesgos").select("*").eq("proyectoId", editProject.id).order("id");
-        if (error) throw error;
-        setRiesgosProyecto(data || []);
-        setRiesgosDisponibles(true);
-      } catch (e) {
-        console.warn("Tabla proyecto_riesgos no disponible:", e.message || e);
-        setRiesgosDisponibles(false);
-      } finally {
-        setCargandoRiesgos(false);
-      }
-    })();
-  }, [editProject]);
-
-  const guardarRiesgo = async (payload) => {
-    try {
-      if (riesgoForm && riesgoForm.mode === "edit") {
-        const { error } = await supabase.from("proyecto_riesgos").update(payload).eq("id", riesgoForm.riesgo.id);
-        if (error) throw error;
-        setRiesgosProyecto(list => list.map(r => r.id === riesgoForm.riesgo.id ? { ...r, ...payload } : r));
-      } else {
-        const { data, error } = await supabase.from("proyecto_riesgos").insert({ proyectoId: editProject.id, ...payload }).select();
-        if (error) throw error;
-        setRiesgosProyecto(list => [...list, ...(data || [])]);
-      }
-      setRiesgoForm(null);
-    } catch (e) {
-      alert("No se pudo guardar el riesgo: " + (e.message || e) + (/column|relation/i.test(e.message||"") ? "\n\n(Puede que falte crear la tabla \"proyecto_riesgos\" en Supabase — ver README.)" : ""));
-    }
-  };
-
-  const eliminarRiesgo = async (riesgo) => {
-    if (!window.confirm('¿Eliminar el riesgo "' + riesgo.nombre + '"?')) return;
-    setRiesgosProyecto(list => list.filter(r => r.id !== riesgo.id));
-    try {
-      const { error } = await supabase.from("proyecto_riesgos").delete().eq("id", riesgo.id);
-      if (error) throw error;
-    } catch (e) {
-      alert("No se pudo eliminar el riesgo: " + (e.message || e));
-      setRiesgosProyecto(list => [...list, riesgo]);
-    }
-  };
-
-  useEffect(() => {
-    if (!editProject) return;
-    (async () => {
-      setCargandoInteresados(true);
-      try {
-        const { data, error } = await supabase.from("proyecto_interesados").select("*").eq("proyectoId", editProject.id).order("id");
-        if (error) throw error;
-        setInteresadosProyecto(data || []);
-        setInteresadosDisponibles(true);
-      } catch (e) {
-        console.warn("Tabla proyecto_interesados no disponible:", e.message || e);
-        setInteresadosDisponibles(false);
-      } finally {
-        setCargandoInteresados(false);
-      }
-    })();
-  }, [editProject]);
-
-  const guardarInteresado = async (payload) => {
-    try {
-      if (interesadoForm && interesadoForm.mode === "edit") {
-        const { error } = await supabase.from("proyecto_interesados").update(payload).eq("id", interesadoForm.interesado.id);
-        if (error) throw error;
-        setInteresadosProyecto(list => list.map(i => i.id === interesadoForm.interesado.id ? { ...i, ...payload } : i));
-      } else {
-        const { data, error } = await supabase.from("proyecto_interesados").insert({ proyectoId: editProject.id, ...payload }).select();
-        if (error) throw error;
-        setInteresadosProyecto(list => [...list, ...(data || [])]);
-      }
-      setInteresadoForm(null);
-    } catch (e) {
-      alert("No se pudo guardar el interesado: " + (e.message || e) + (/column|relation/i.test(e.message||"") ? "\n\n(Puede que falte crear la tabla \"proyecto_interesados\" en Supabase — ver README.)" : ""));
-    }
-  };
-
-  const eliminarInteresado = async (interesado) => {
-    if (!window.confirm('¿Eliminar al interesado "' + interesado.nombre + '"?')) return;
-    setInteresadosProyecto(list => list.filter(i => i.id !== interesado.id));
-    try {
-      const { error } = await supabase.from("proyecto_interesados").delete().eq("id", interesado.id);
-      if (error) throw error;
-    } catch (e) {
-      alert("No se pudo eliminar el interesado: " + (e.message || e));
-      setInteresadosProyecto(list => [...list, interesado]);
-    }
-  };
-
-  useEffect(() => {
-    if (!editProject) return;
-    (async () => {
-      setCargandoCambios(true);
-      try {
-        const { data, error } = await supabase.from("proyecto_cambios").select("*").eq("proyectoId", editProject.id).order("id", { ascending: false });
-        if (error) throw error;
-        setCambiosProyecto(data || []);
-        setCambiosDisponibles(true);
-      } catch (e) {
-        console.warn("Tabla proyecto_cambios no disponible:", e.message || e);
-        setCambiosDisponibles(false);
-      } finally {
-        setCargandoCambios(false);
-      }
-    })();
-  }, [editProject]);
-
-  // Compara el proyecto antes y después de guardar, y registra en proyecto_cambios
-  // cada campo vigilado que haya cambiado. Se llama después de un guardado exitoso;
-  // si la tabla todavía no existe, falla en silencio y no bloquea el guardado del proyecto.
-  const registrarCambios = async (anterior, nuevo) => {
-    if (!anterior) return;
-    try {
-      const filas = [];
-      CAMBIOS_CAMPOS.forEach(campo => {
-        const antes = anterior[campo.key];
-        const despues = nuevo[campo.key];
-        const antesStr = (antes === null || antes === undefined) ? "" : String(antes);
-        const despuesStr = (despues === null || despues === undefined) ? "" : String(despues);
-        if (antesStr === despuesStr) return;
-        filas.push({
-          proyectoId: editProject.id,
-          campo: campo.label,
-          valor_anterior: formatValorCambio(campo, antes, paises),
-          valor_nuevo: formatValorCambio(campo, despues, paises),
-          usuario: (session && session.nombre) || "Usuario"
-        });
-      });
-      if (filas.length === 0) return;
-      const { data, error } = await supabase.from("proyecto_cambios").insert(filas).select();
-      if (error) throw error;
-      setCambiosProyecto(list => [...(data || []), ...list]);
-    } catch (e) {
-      console.warn("No se pudo registrar el cambio (falta la tabla proyecto_cambios):", e.message || e);
-    }
-  };
 
   useEffect(() => {
     if (!editProject) return;
@@ -1027,7 +802,6 @@ function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, respon
         const payload = normalize(d);
         const { error } = await supabase.from("proyectos").update(payload).eq("id", editProject.id);
         if (error) throw error;
-        await registrarCambios(editProject, payload);
       } else {
         const rows = drafts.filter(d => d.nombre.trim()).map(normalize);
         if (!rows.length) { alert("Agrega al menos un proyecto con nombre"); return; }
@@ -1090,11 +864,7 @@ function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, respon
           <div style={{display:"flex",gap:22,padding:"0 1.25rem",background:y.grayBg,borderBottom:"1px solid "+y.border,flexShrink:0}}>
             {[
               { key:"datos", label:"Datos del proyecto", icon:"ti-file-text" },
-              { key:"cronograma", label:"Cronograma", icon:"ti-calendar-stats", count: tareasProyecto.length },
-              { key:"riesgos", label:"Riesgos", icon:"ti-alert-triangle", count: riesgosProyecto.length },
-              { key:"interesados", label:"Interesados", icon:"ti-users", count: interesadosProyecto.length },
-              { key:"comentarios", label:"Comentarios", icon:"ti-message-circle", count: comentarios.length },
-              { key:"cambios", label:"Historial de cambios", icon:"ti-history", count: cambiosProyecto.length }
+              { key:"comentarios", label:"Comentarios", icon:"ti-message-circle", count: comentarios.length }
             ].map(t => (
               <div key={t.key} onClick={() => setTab(t.key)} style={{
                 padding:"0.7rem 0.1rem",cursor:"pointer",fontSize:13,fontWeight:700,
@@ -1195,20 +965,11 @@ function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, respon
                 </select>
               </div>
               <div>
-                <label style={labelStyle}>Avance{editProject && tareasDisponibles && tareasProyecto.length > 0 ? " (según el Cronograma)" : ""}</label>
-                {editProject && tareasDisponibles && tareasProyecto.length > 0 ? (
-                  <div style={{display:"flex",alignItems:"center",gap:8,marginTop:9}}>
-                    <div style={{flex:1,height:8,background:y.border,borderRadius:4,overflow:"hidden"}}>
-                      <div style={{height:"100%",borderRadius:4,background:y.primary,width:avancePctTareas+"%"}}/>
-                    </div>
-                    <span style={{fontSize:12,fontWeight:700,color:y.primary,minWidth:36,textAlign:"right"}}>{avancePctTareas}%</span>
-                  </div>
-                ) : (
-                  <div style={{display:"flex",alignItems:"center",gap:8,marginTop:9}}>
-                    <input type="range" min={0} max={100} value={Math.round((current.avance||0)*100) <= 100 ? Math.round((current.avance||0)*100) : current.avance||0} onChange={e => updateField(active,"avance",parseInt(e.target.value)/100)} style={{flex:1}} />
-                    <span style={{fontSize:12,fontWeight:700,color:y.primary,minWidth:32}}>{Math.round((current.avance||0)*100)}%</span>
-                  </div>
-                )}
+                <label style={labelStyle}>Avance{editProject ? " (si el proyecto tiene Plan de acción, ahí se calcula solo)" : ""}</label>
+                <div style={{display:"flex",alignItems:"center",gap:8,marginTop:9}}>
+                  <input type="range" min={0} max={100} value={Math.round((current.avance||0)*100) <= 100 ? Math.round((current.avance||0)*100) : current.avance||0} onChange={e => updateField(active,"avance",parseInt(e.target.value)/100)} style={{flex:1}} />
+                  <span style={{fontSize:12,fontWeight:700,color:y.primary,minWidth:32}}>{Math.round((current.avance||0)*100)}%</span>
+                </div>
               </div>
             </div>
 
@@ -1232,290 +993,6 @@ function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, respon
                 <i className="ti ti-clock" style={{fontSize:12}}/>
                 Última actualización: {formatearFecha(editProject.actualizado_en)} — {editProject.actualizado_por || "—"}
               </div>
-            )}
-          </React.Fragment>
-        )}
-
-        {editProject && tab === "cronograma" && (
-          <React.Fragment>
-            <div style={{background:y.grayBg,border:"1px solid "+y.border,borderRadius:10,padding:"0.75rem 1rem",marginBottom:14,display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,fontSize:12,color:y.text2}}>
-              <div>Proyecto: <strong style={{color:y.text}}>{current.nombre || "—"}</strong></div>
-              <div>Responsable: <strong style={{color:y.text}}>{current.responsable || "—"}</strong></div>
-              <div>País: <strong style={{color:y.text}}>{current.pais_id ? bandera((paises.find(p=>p.id===parseInt(current.pais_id))||{}).nombre) + " " + ((paises.find(p=>p.id===parseInt(current.pais_id))||{}).nombre || "") : "—"}</strong></div>
-              <div>Inicio: <strong style={{color:y.text}}>{current.fecha_inicio || "—"}</strong></div>
-            </div>
-
-            {!tareasDisponibles ? (
-              <div style={{fontSize:12,color:y.text3}}>Esta función todavía no está activada en la base de datos (falta crear la tabla "proyecto_tareas").</div>
-            ) : cargandoTareas ? (
-              <div style={{fontSize:12,color:y.text3}}>Cargando cronograma...</div>
-            ) : (
-              <React.Fragment>
-                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,gap:8,flexWrap:"wrap"}}>
-                  <span style={{fontSize:12.5,fontWeight:700,color:y.text}}>{tareasProyecto.length} {tareasProyecto.length===1?"tarea":"tareas"}</span>
-                  <div style={{display:"flex",gap:8}}>
-                    {tareasProyecto.length > 0 && (
-                      <Btn sm onClick={() => setMostrarRaci(v => !v)}><i className="ti ti-table"/> {mostrarRaci ? "Ocultar" : "Ver"} matriz RACI</Btn>
-                    )}
-                    {!tareaForm && <Btn sm primary onClick={() => setTareaForm({mode:"add"})}><i className="ti ti-plus"/> Agregar tarea</Btn>}
-                  </div>
-                </div>
-
-                {mostrarRaci && tareasProyecto.length > 0 && (
-                  <div style={{background:y.grayBg,borderRadius:10,padding:"0.85rem 1rem",marginBottom:14}}>
-                    <div style={{fontSize:11,color:y.text3,marginBottom:8}}>
-                      <strong style={{color:y.text2}}>R</strong> Responsable (ejecuta) · <strong style={{color:y.text2}}>A</strong> Aprobador (rinde cuentas) · <strong style={{color:y.text2}}>C</strong> Consultado · <strong style={{color:y.text2}}>I</strong> Informado
-                    </div>
-                    <div style={{overflowX:"auto"}}>
-                      <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,background:y.surface,borderRadius:8}}>
-                        <thead>
-                          <tr>
-                            {["EDT","Tarea","R","A","C","I"].map(h => (
-                              <th key={h} style={{textAlign:"left",fontSize:10,fontWeight:800,color:y.text3,textTransform:"uppercase",letterSpacing:.3,padding:"0.5rem 0.5rem",borderBottom:"1px solid "+y.border,whiteSpace:"nowrap"}}>{h}</th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {tareasProyecto.map((t, i) => (
-                            <tr key={t.id} style={{borderBottom:"1px solid "+y.grayBg}}>
-                              <td style={{padding:"0.5rem",fontWeight:800,color:y.text3,fontSize:11}}>{i+1}</td>
-                              <td style={{padding:"0.5rem",color:y.text,maxWidth:200}}>{t.titulo}</td>
-                              <td style={{padding:"0.5rem",color:y.text2,whiteSpace:"nowrap"}}>{t.responsable || "—"}</td>
-                              <td style={{padding:"0.5rem",color:y.text2,whiteSpace:"nowrap"}}>{t.aprobador || "—"}</td>
-                              <td style={{padding:"0.5rem",color:y.text2,maxWidth:180}}>{t.consultados || "—"}</td>
-                              <td style={{padding:"0.5rem",color:y.text2,maxWidth:180}}>{t.informados || "—"}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
-
-                {tareaForm && (
-                  <TareaForm
-                    tarea={tareaForm.mode === "edit" ? tareaForm.tarea : null}
-                    tareasProyecto={tareasProyecto}
-                    responsables={responsables}
-                    responsablesDisponibles={responsablesDisponibles}
-                    onGuardar={guardarTarea}
-                    onCancelar={() => setTareaForm(null)}
-                  />
-                )}
-
-                {tareasProyecto.length === 0 ? (
-                  <div style={{fontSize:12,color:y.text3,padding:"1rem 0"}}>Sin tareas todavía — agrega la primera con el botón de arriba.</div>
-                ) : (
-                  <React.Fragment>
-                  <GanttChart tareas={tareasProyecto} criticalSet={rutaCritica} />
-                  <div style={{overflowX:"auto"}}>
-                    <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
-                      <thead>
-                        <tr style={{background:y.grayBg}}>
-                          {["EDT","Tarea","Responsable","Depende de","Inicio","Entrega","Días","% Avance","Estatus",""].map(h => (
-                            <th key={h} style={{textAlign:"left",fontSize:10,fontWeight:800,color:y.text3,textTransform:"uppercase",letterSpacing:.3,padding:"0.5rem 0.5rem",borderBottom:"1px solid "+y.border,whiteSpace:"nowrap"}}>{h}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {tareasProyecto.map((t, i) => {
-                          const est = estatusEfectivoTarea(t);
-                          const [estBg, estColor] = TAREA_ESTADO_COLOR[est] || [y.grayBg, y.gray];
-                          const dias = duracionDias(t.fecha_inicio, t.fecha_entrega);
-                          const dep = t.depende_id ? tareasProyecto.findIndex(x => x.id === t.depende_id) : -1;
-                          const pct = avanceTarea(t);
-                          const critica = rutaCritica.has(t.id);
-                          return (
-                            <tr key={t.id} style={{borderBottom:"1px solid "+y.grayBg}}>
-                              <td style={{padding:"0.5rem",fontWeight:800,color:y.text3,fontSize:11}}>{i+1}</td>
-                              <td style={{padding:"0.5rem",color:y.text,maxWidth:220}}>
-                                {critica && <i className="ti ti-alert-triangle" style={{color:y.danger,fontSize:12,marginRight:5}} title="Ruta crítica"/>}
-                                {t.titulo}
-                              </td>
-                              <td style={{padding:"0.5rem",color:y.text2,whiteSpace:"nowrap"}}>{t.responsable || "—"}</td>
-                              <td style={{padding:"0.5rem",color:y.text3,whiteSpace:"nowrap"}}>{dep >= 0 ? "EDT " + (dep+1) : "—"}</td>
-                              <td style={{padding:"0.5rem",color:y.text2,whiteSpace:"nowrap"}}>{t.fecha_inicio || "—"}</td>
-                              <td style={{padding:"0.5rem",color:y.text2,whiteSpace:"nowrap"}}>{t.fecha_entrega || "—"}</td>
-                              <td style={{padding:"0.5rem",color:y.text2}}>{dias!=null ? dias : "—"}</td>
-                              <td style={{padding:"0.5rem",whiteSpace:"nowrap"}}>
-                                <span style={{display:"inline-block",width:44,height:6,borderRadius:20,background:y.border,position:"relative",marginRight:6,verticalAlign:"middle"}}>
-                                  <span style={{position:"absolute",left:0,top:0,bottom:0,borderRadius:20,background:y.primary,width:pct+"%"}}/>
-                                </span>
-                                {pct}%
-                              </td>
-                              <td style={{padding:"0.5rem"}}>
-                                <span style={{display:"inline-flex",padding:"3px 9px",borderRadius:20,fontSize:10.5,fontWeight:700,background:estBg,color:estColor,whiteSpace:"nowrap"}}>{est}</span>
-                              </td>
-                              <td style={{padding:"0.5rem",textAlign:"right",whiteSpace:"nowrap"}}>
-                                <button onClick={() => setTareaForm({mode:"edit", tarea:t})} style={{background:"none",border:"none",color:y.text3,cursor:"pointer",padding:3}} title="Editar"><i className="ti ti-pencil" style={{fontSize:13}}/></button>
-                                <button onClick={() => eliminarTarea(t)} style={{background:"none",border:"none",color:y.text3,cursor:"pointer",padding:3}} title="Eliminar"><i className="ti ti-trash" style={{fontSize:13}}/></button>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                  </React.Fragment>
-                )}
-
-                {tareasProyecto.length > 0 && (
-                  <div style={{background:y.primaryLight,borderRadius:10,padding:"0.75rem 1rem",marginTop:14,display:"flex",alignItems:"center",gap:12,fontSize:12.5,color:y.text2}}>
-                    <i className="ti ti-chart-bar" style={{color:y.primary}}/>
-                    Avance general del proyecto (promedio de {tareasProyecto.length} {tareasProyecto.length===1?"tarea":"tareas"}):
-                    <strong style={{color:y.primary}}>{avancePctTareas}%</strong>
-                  </div>
-                )}
-              </React.Fragment>
-            )}
-          </React.Fragment>
-        )}
-
-        {editProject && tab === "riesgos" && (
-          <React.Fragment>
-            {!riesgosDisponibles ? (
-              <div style={{fontSize:12,color:y.text3}}>Esta función todavía no está activada en la base de datos (falta crear la tabla "proyecto_riesgos" — ver README).</div>
-            ) : cargandoRiesgos ? (
-              <div style={{fontSize:12,color:y.text3}}>Cargando riesgos...</div>
-            ) : (
-              <React.Fragment>
-                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
-                  <span style={{fontSize:12.5,fontWeight:700,color:y.text}}>{riesgosProyecto.length} {riesgosProyecto.length===1?"riesgo":"riesgos"}</span>
-                  {!riesgoForm && <Btn sm primary onClick={() => setRiesgoForm({mode:"add"})}><i className="ti ti-plus"/> Agregar riesgo</Btn>}
-                </div>
-
-                {riesgoForm && (
-                  <RiesgoForm
-                    riesgo={riesgoForm.mode === "edit" ? riesgoForm.riesgo : null}
-                    responsables={responsables}
-                    responsablesDisponibles={responsablesDisponibles}
-                    onGuardar={guardarRiesgo}
-                    onCancelar={() => setRiesgoForm(null)}
-                  />
-                )}
-
-                {riesgosProyecto.length === 0 ? (
-                  <div style={{fontSize:12,color:y.text3,padding:"1rem 0"}}>Sin riesgos identificados todavía — agrega el primero con el botón de arriba.</div>
-                ) : (
-                  <div style={{overflowX:"auto"}}>
-                    <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
-                      <thead>
-                        <tr style={{background:y.grayBg}}>
-                          {["Riesgo","Probabilidad","Impacto","Nivel","Responsable","Mitigación","Estado",""].map(h => (
-                            <th key={h} style={{textAlign:"left",fontSize:10,fontWeight:800,color:y.text3,textTransform:"uppercase",letterSpacing:.3,padding:"0.5rem 0.5rem",borderBottom:"1px solid "+y.border,whiteSpace:"nowrap"}}>{h}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {riesgosProyecto.map(r => {
-                          const { nivel } = nivelRiesgo(r.probabilidad, r.impacto);
-                          const [nivelBg, nivelColor] = RIESGO_NIVEL_COLOR[nivel] || [y.grayBg, y.gray];
-                          const [estBg, estColor] = RIESGO_ESTADO_COLOR[r.estado] || [y.grayBg, y.gray];
-                          return (
-                            <tr key={r.id} style={{borderBottom:"1px solid "+y.grayBg}}>
-                              <td style={{padding:"0.5rem",color:y.text,maxWidth:220}}>{r.nombre}</td>
-                              <td style={{padding:"0.5rem",color:y.text2,whiteSpace:"nowrap"}}>{r.probabilidad || "—"}</td>
-                              <td style={{padding:"0.5rem",color:y.text2,whiteSpace:"nowrap"}}>{r.impacto || "—"}</td>
-                              <td style={{padding:"0.5rem"}}>
-                                <span style={{display:"inline-flex",padding:"3px 9px",borderRadius:20,fontSize:10.5,fontWeight:700,background:nivelBg,color:nivelColor,whiteSpace:"nowrap"}}>{nivel}</span>
-                              </td>
-                              <td style={{padding:"0.5rem",color:y.text2,whiteSpace:"nowrap"}}>{r.responsable || "—"}</td>
-                              <td style={{padding:"0.5rem",color:y.text3,maxWidth:200,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={r.mitigacion || ""}>{r.mitigacion || "—"}</td>
-                              <td style={{padding:"0.5rem"}}>
-                                <span style={{display:"inline-flex",padding:"3px 9px",borderRadius:20,fontSize:10.5,fontWeight:700,background:estBg,color:estColor,whiteSpace:"nowrap"}}>{r.estado || "Abierto"}</span>
-                              </td>
-                              <td style={{padding:"0.5rem",textAlign:"right",whiteSpace:"nowrap"}}>
-                                <button onClick={() => setRiesgoForm({mode:"edit", riesgo:r})} style={{background:"none",border:"none",color:y.text3,cursor:"pointer",padding:3}} title="Editar"><i className="ti ti-pencil" style={{fontSize:13}}/></button>
-                                <button onClick={() => eliminarRiesgo(r)} style={{background:"none",border:"none",color:y.text3,cursor:"pointer",padding:3}} title="Eliminar"><i className="ti ti-trash" style={{fontSize:13}}/></button>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-
-                {riesgosProyecto.length > 0 && riesgosProyecto.some(r => nivelRiesgo(r.probabilidad, r.impacto).nivel === "Alto" && r.estado === "Abierto") && (
-                  <div style={{background:y.dangerBg,borderRadius:10,padding:"0.75rem 1rem",marginTop:14,display:"flex",alignItems:"center",gap:12,fontSize:12.5,color:y.danger}}>
-                    <i className="ti ti-alert-triangle"/>
-                    Este proyecto tiene riesgos de nivel <strong>Alto</strong> todavía abiertos — revisa su plan de mitigación.
-                  </div>
-                )}
-              </React.Fragment>
-            )}
-          </React.Fragment>
-        )}
-
-        {editProject && tab === "interesados" && (
-          <React.Fragment>
-            {!interesadosDisponibles ? (
-              <div style={{fontSize:12,color:y.text3}}>Esta función todavía no está activada en la base de datos (falta crear la tabla "proyecto_interesados" — ver README).</div>
-            ) : cargandoInteresados ? (
-              <div style={{fontSize:12,color:y.text3}}>Cargando interesados...</div>
-            ) : (
-              <React.Fragment>
-                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
-                  <span style={{fontSize:12.5,fontWeight:700,color:y.text}}>{interesadosProyecto.length} {interesadosProyecto.length===1?"interesado":"interesados"}</span>
-                  {!interesadoForm && <Btn sm primary onClick={() => setInteresadoForm({mode:"add"})}><i className="ti ti-plus"/> Agregar interesado</Btn>}
-                </div>
-
-                {interesadoForm && (
-                  <InteresadoForm
-                    interesado={interesadoForm.mode === "edit" ? interesadoForm.interesado : null}
-                    onGuardar={guardarInteresado}
-                    onCancelar={() => setInteresadoForm(null)}
-                  />
-                )}
-
-                {interesadosProyecto.length === 0 ? (
-                  <div style={{fontSize:12,color:y.text3,padding:"1rem 0"}}>Sin interesados identificados todavía — agrega el primero con el botón de arriba.</div>
-                ) : (
-                  <div style={{overflowX:"auto"}}>
-                    <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
-                      <thead>
-                        <tr style={{background:y.grayBg}}>
-                          {["Interesado","Tipo","Influencia","Interés","Estrategia","Contacto",""].map(h => (
-                            <th key={h} style={{textAlign:"left",fontSize:10,fontWeight:800,color:y.text3,textTransform:"uppercase",letterSpacing:.3,padding:"0.5rem 0.5rem",borderBottom:"1px solid "+y.border,whiteSpace:"nowrap"}}>{h}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {interesadosProyecto.map(i => {
-                          const estrategia = estrategiaInteresado(i.influencia, i.interes);
-                          const [estBg, estColor] = ESTRATEGIA_INTERESADO_COLOR[estrategia] || [y.grayBg, y.gray];
-                          return (
-                            <tr key={i.id} style={{borderBottom:"1px solid "+y.grayBg}}>
-                              <td style={{padding:"0.5rem",color:y.text,maxWidth:200}}>
-                                {i.nombre}
-                                {i.rol && <div style={{fontSize:10,color:y.text3,marginTop:1}}>{i.rol}</div>}
-                              </td>
-                              <td style={{padding:"0.5rem",color:y.text2,whiteSpace:"nowrap"}}>{i.tipo || "—"}</td>
-                              <td style={{padding:"0.5rem",color:y.text2,whiteSpace:"nowrap"}}>{i.influencia || "—"}</td>
-                              <td style={{padding:"0.5rem",color:y.text2,whiteSpace:"nowrap"}}>{i.interes || "—"}</td>
-                              <td style={{padding:"0.5rem"}}>
-                                <span style={{display:"inline-flex",padding:"3px 9px",borderRadius:20,fontSize:10.5,fontWeight:700,background:estBg,color:estColor,whiteSpace:"nowrap"}}>{estrategia}</span>
-                              </td>
-                              <td style={{padding:"0.5rem",color:y.text3,whiteSpace:"nowrap"}}>{i.contacto || "—"}</td>
-                              <td style={{padding:"0.5rem",textAlign:"right",whiteSpace:"nowrap"}}>
-                                <button onClick={() => setInteresadoForm({mode:"edit", interesado:i})} style={{background:"none",border:"none",color:y.text3,cursor:"pointer",padding:3}} title="Editar"><i className="ti ti-pencil" style={{fontSize:13}}/></button>
-                                <button onClick={() => eliminarInteresado(i)} style={{background:"none",border:"none",color:y.text3,cursor:"pointer",padding:3}} title="Eliminar"><i className="ti ti-trash" style={{fontSize:13}}/></button>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-
-                {interesadosProyecto.length > 0 && interesadosProyecto.some(i => estrategiaInteresado(i.influencia, i.interes) === "Gestionar de cerca") && (
-                  <div style={{background:y.dangerBg,borderRadius:10,padding:"0.75rem 1rem",marginTop:14,display:"flex",alignItems:"center",gap:12,fontSize:12.5,color:y.danger}}>
-                    <i className="ti ti-alert-triangle"/>
-                    Este proyecto tiene interesados de alta influencia y alto interés — hay que <strong>gestionarlos de cerca</strong>.
-                  </div>
-                )}
-              </React.Fragment>
             )}
           </React.Fragment>
         )}
@@ -1548,41 +1025,6 @@ function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, respon
                   <Btn sm primary disabled={enviandoComentario || !nuevoComentario.trim()} onClick={agregarComentario}><i className="ti ti-send"/> Enviar</Btn>
                 </div>
               </React.Fragment>
-            )}
-          </React.Fragment>
-        )}
-
-        {editProject && tab === "cambios" && (
-          <React.Fragment>
-            {!cambiosDisponibles ? (
-              <div style={{fontSize:12,color:y.text3}}>Esta función todavía no está activada en la base de datos (falta crear la tabla "proyecto_cambios" — ver README).</div>
-            ) : cargandoCambios ? (
-              <div style={{fontSize:12,color:y.text3}}>Cargando historial...</div>
-            ) : cambiosProyecto.length === 0 ? (
-              <div style={{fontSize:12,color:y.text3,padding:"1rem 0"}}>Sin cambios registrados todavía. En cuanto guardes una modificación a código, categoría, prioridad, área, país, responsable, estado, fechas o ticket, aparecerá aquí automáticamente.</div>
-            ) : (
-              <div style={{overflowX:"auto"}}>
-                <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
-                  <thead>
-                    <tr style={{background:y.grayBg}}>
-                      {["Fecha","Usuario","Campo","Antes","Después"].map(h => (
-                        <th key={h} style={{textAlign:"left",fontSize:10,fontWeight:800,color:y.text3,textTransform:"uppercase",letterSpacing:.3,padding:"0.5rem 0.5rem",borderBottom:"1px solid "+y.border,whiteSpace:"nowrap"}}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {cambiosProyecto.map(c => (
-                      <tr key={c.id} style={{borderBottom:"1px solid "+y.grayBg}}>
-                        <td style={{padding:"0.5rem",color:y.text3,whiteSpace:"nowrap",fontSize:11}}>{formatearFecha(c.createdAt)}</td>
-                        <td style={{padding:"0.5rem",color:y.text2,whiteSpace:"nowrap"}}>{c.usuario || "—"}</td>
-                        <td style={{padding:"0.5rem",fontWeight:700,color:y.text,whiteSpace:"nowrap"}}>{c.campo}</td>
-                        <td style={{padding:"0.5rem",color:y.danger,maxWidth:220,textDecoration:"line-through",opacity:.75}}>{c.valor_anterior}</td>
-                        <td style={{padding:"0.5rem",color:y.success,maxWidth:220,fontWeight:600}}>{c.valor_nuevo}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
             )}
           </React.Fragment>
         )}
@@ -2200,7 +1642,6 @@ function App() {
   const [usuarioPaisesDisponibles, setUsuarioPaisesDisponibles] = useState(true);
   const [loading, setLoading] = useState(true);
   const [vista, setVista] = useState("proyectos"); // usuarios | accesos | areas | paises | responsables | proyectos
-  const [view, setView] = useState("tarjetas");
   const [filtroCategoria, setFiltroCategoria] = useState("");
   const [filtroEstado, setFiltroEstado] = useState("");
   const [filtroPais, setFiltroPais] = useState("");
@@ -2208,6 +1649,7 @@ function App() {
   const [modal, setModal] = useState(null); // {mode:"add"|"edit", project}
   const [toDelete, setToDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
+  const [selectedId, setSelectedId] = useState(null); // id del proyecto seleccionado para ver su Plan de acción abajo de la tabla
 
   const cargarDatos = async () => {
     setLoading(true);
@@ -2370,21 +1812,6 @@ function App() {
       alert("No se pudo eliminar: " + (e.message || e));
     } finally {
       setDeleting(false);
-    }
-  };
-
-  // Usado por el Kanban al soltar una tarjeta en otra columna.
-  const cambiarEstado = async (id, nuevoEstado) => {
-    const anterior = proyectos.find(p => p.id === id);
-    if (!anterior || anterior.estado === nuevoEstado) return;
-    setProyectos(list => list.map(p => p.id === id ? { ...p, estado: nuevoEstado } : p)); // optimista
-    try {
-      const { error } = await supabase.from("proyectos").update({ estado: nuevoEstado }).eq("id", id);
-      if (error) throw error;
-    } catch (e) {
-      console.error(e);
-      alert("No se pudo mover el proyecto: " + (e.message || e));
-      setProyectos(list => list.map(p => p.id === id ? anterior : p)); // revertir
     }
   };
 
@@ -2599,13 +2026,6 @@ function App() {
                       <option value="">Todos los países</option>
                       {paises.map(p => <option key={p.id} value={p.id}>{bandera(p.nombre)} {p.nombre}</option>)}
                     </select>
-                    <div style={{display:"flex",border:"1px solid "+y.border2,borderRadius:6,overflow:"hidden"}}>
-                      {["tarjetas","kanban","tabla"].map(v => (
-                        <button key={v} title={v==="tarjetas"?"Tarjetas":v==="kanban"?"Kanban":"Tabla"} onClick={() => setView(v)} style={{padding:"0.28rem 0.6rem",border:"none",background: view===v ? y.primary : y.surface, color: view===v ? "#fff" : y.text2, cursor:"pointer",fontSize:11,fontWeight:600}}>
-                          <i className={"ti "+(v==="tarjetas"?"ti-layout-grid":v==="kanban"?"ti-layout-kanban":"ti-list")}/>
-                        </button>
-                      ))}
-                    </div>
                     <Btn sm onClick={exportarExcel}><i className="ti ti-file-spreadsheet"/> Excel</Btn>
                     <Btn sm onClick={exportarPDF}><i className="ti ti-file-type-pdf"/> PDF</Btn>
                     {puedeEditar && <Btn primary sm onClick={() => setModal({mode:"add"})}><i className="ti ti-plus"/> Agregar proyecto</Btn>}
@@ -2613,168 +2033,69 @@ function App() {
                 }
               />
 
-              {view === "tarjetas" ? (
-                <div style={{padding:"1rem",display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:12}}>
-                  {filtrados.length === 0 && (
-                    <div style={{gridColumn:"1 / -1",padding:"3rem",textAlign:"center",color:y.text3}}>
-                      <i className="ti ti-briefcase-off" style={{fontSize:48,display:"block",marginBottom:12,opacity:.3}}/>
-                      <div style={{fontSize:15,fontWeight:600}}>Sin proyectos</div>
-                    </div>
-                  )}
-                  {filtrados.map(p => {
-                    const { c, bg } = CATEGORIA_ICONOS[p.categoria] || { c:y.gray, bg:y.grayBg };
-                    const tareasP = tareasPorProyecto[p.id] || [];
-                    const avancePct = Math.round(avanceEfectivo(p, tareasP)*100);
-                    const avanceColor = avancePct>=80?y.success:avancePct>=50?y.warning:y.danger;
-                    const v = estadoVencimiento(p);
-                    return (
-                      <div key={p.id} style={{background:y.surface,border:"1px solid "+y.border,borderLeft: v ? "4px solid "+(v.tipo==="vencido"?y.danger:y.warning) : "1px solid "+y.border,borderRadius:12,overflow:"hidden",boxShadow:"0 1px 4px rgba(0,0,0,.06)"}}>
-                        <div style={{padding:"0.85rem 1rem",borderBottom:"1px solid "+y.border,background:"linear-gradient(to right,"+bg+",#fff)"}}>
-                          <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:8,marginBottom:6}}>
-                            <span style={{fontSize:9,fontWeight:700,padding:"2px 7px",borderRadius:10,background:bg,color:c,textTransform:"uppercase"}}>{p.categoria}</span>
-                            <div style={{display:"flex",gap:4}}>
-                              {p.prioridad === 1 && <span style={{fontSize:9,fontWeight:700,color:y.danger,background:y.dangerBg,padding:"2px 6px",borderRadius:6}}>ALTA</span>}
-                              <Badge label={p.estado || "Pendiente"} />
-                            </div>
-                          </div>
-                          <div style={{fontSize:13,fontWeight:700,color:y.text,lineHeight:1.4,marginBottom:4}}>{p.nombre}</div>
-                          {p.codigo && <div style={{fontSize:10,color:y.text3}}>#{p.codigo}</div>}
-                        </div>
-                        <div style={{padding:"0.85rem 1rem"}}>
-                          <div style={{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap"}}>
-                            {p.pais_id && <div style={{fontSize:11,color:y.text2,display:"flex",alignItems:"center",gap:3}}><i className="ti ti-map-pin" style={{fontSize:11,color:y.text3}}/>{bandera(nombrePais(p.pais_id))} {nombrePais(p.pais_id)}</div>}
-                            {p.area && <div style={{fontSize:11,color:y.text2,display:"flex",alignItems:"center",gap:3}}><i className="ti ti-building" style={{fontSize:11,color:y.text3}}/>{p.area}</div>}
-                            {p.responsable && <div style={{fontSize:11,color:y.text2,display:"flex",alignItems:"center",gap:3}}><i className="ti ti-user" style={{fontSize:11,color:y.text3}}/>{p.responsable}</div>}
-                            {p.ticket && <div style={{fontSize:11,color:y.primary,fontWeight:600}}>Ticket #{p.ticket}</div>}
-                          </div>
-                          {p.fecha_inicio && (
-                            <div style={{fontSize:10,color:y.text3,marginBottom:6,display:"flex",gap:8}}>
-                              <span><i className="ti ti-calendar-event"/> {p.fecha_inicio}</span>
-                              {p.fecha_fin && <span>→ {p.fecha_fin}</span>}
-                            </div>
-                          )}
-                          <div style={{marginBottom:10}}>
-                            <div style={{display:"flex",justifyContent:"space-between",fontSize:11,marginBottom:4}}>
-                              <span style={{color:y.text2,fontWeight:600}}>Avance{tareasP.length > 0 && " · " + tareasP.filter(t=>t.completada).length + "/" + tareasP.length + " tareas"}</span>
-                              <span style={{color:avanceColor,fontWeight:700}}>{avancePct}%</span>
-                            </div>
-                            <div style={{height:8,background:y.border,borderRadius:4,overflow:"hidden"}}>
-                              <div style={{height:"100%",borderRadius:4,width:avancePct+"%",background:avanceColor}}/>
-                            </div>
-                          </div>
-                          {v && (
-                            <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:700,marginBottom:10,padding:"0.3rem 0.5rem",borderRadius:7,background: v.tipo==="vencido"?y.dangerBg:y.warningBg,color: v.tipo==="vencido"?y.danger:y.warning}}>
-                              <i className={"ti "+(v.tipo==="vencido"?"ti-alert-triangle":"ti-bell")} style={{fontSize:13}}/>
-                              {textoVencimiento(v)}
-                            </div>
-                          )}
-                          {p.observacion && <div style={{fontSize:11,color:y.text2,background:y.grayBg,borderRadius:6,padding:"0.4rem 0.6rem",marginBottom:10}}>{p.observacion}</div>}
-                          {(puedeEditar || puedeEliminar) && (
-                            <div style={{display:"flex",justifyContent:"flex-end",gap:6,borderTop:"1px solid "+y.border,paddingTop:8}}>
-                              {puedeEditar && <Btn sm onClick={() => setModal({mode:"edit", project:p})}><i className="ti ti-pencil"/> Editar</Btn>}
-                              {puedeEliminar && <Btn sm danger onClick={() => setToDelete(p)}><i className="ti ti-trash"/></Btn>}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : view === "kanban" ? (
-                <div style={{padding:"1rem",display:"flex",gap:12,overflowX:"auto"}}>
-                  {ESTADOS.map(estado => {
-                    const items = filtrados.filter(p => (p.estado || "Pendiente") === estado);
-                    const [colBg, colColor] = ESTADO_COLOR[estado] || [y.grayBg, y.gray];
-                    return (
-                      <div key={estado}
-                        onDragOver={e => e.preventDefault()}
-                        onDrop={e => { e.preventDefault(); if (!puedeEditar) return; const id = parseInt(e.dataTransfer.getData("text/plain")); if (id) cambiarEstado(id, estado); }}
-                        style={{minWidth:250,width:250,flexShrink:0,background:y.grayBg,borderRadius:10,padding:"0.6rem",display:"flex",flexDirection:"column"}}>
-                        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0.3rem 0.4rem",marginBottom:8}}>
-                          <span style={{fontSize:11,fontWeight:700,color:colColor}}>{estado}</span>
-                          <span style={{fontSize:10,fontWeight:700,color:y.text3,background:y.surface,borderRadius:10,padding:"1px 8px"}}>{items.length}</span>
-                        </div>
-                        <div style={{display:"flex",flexDirection:"column",gap:8,minHeight:60}}>
-                          {items.length === 0 && <div style={{fontSize:11,color:y.text3,textAlign:"center",padding:"1rem 0"}}>Sin proyectos</div>}
-                          {items.map(p => {
-                            const tareasP = tareasPorProyecto[p.id] || [];
-                            const avancePct = Math.round(avanceEfectivo(p, tareasP)*100);
-                            const { c: catColor, bg: catBg } = CATEGORIA_ICONOS[p.categoria] || { c:y.gray, bg:y.grayBg };
-                            const v = estadoVencimiento(p);
-                            return (
-                              <div key={p.id} draggable={puedeEditar}
-                                onDragStart={e => puedeEditar && e.dataTransfer.setData("text/plain", String(p.id))}
-                                onClick={() => puedeEditar && setModal({mode:"edit", project:p})}
-                                style={{background:y.surface,border:"1px solid "+y.border,borderLeft: v ? "3px solid "+(v.tipo==="vencido"?y.danger:y.warning) : "1px solid "+y.border,borderRadius:8,padding:"0.6rem 0.7rem",cursor: puedeEditar ? "grab" : "default",boxShadow:"0 1px 3px rgba(0,0,0,.05)"}}>
-                                <div style={{fontSize:11,fontWeight:700,color:y.text,marginBottom:6,lineHeight:1.3}}>{p.nombre}</div>
-                                <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6}}>
-                                  <span style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:8,background:catBg,color:catColor}}>{p.categoria}</span>
-                                  {p.prioridad === 1 && <span style={{fontSize:9,fontWeight:700,color:y.danger}}>ALTA</span>}
-                                </div>
-                                <div style={{height:5,background:y.border,borderRadius:3,overflow:"hidden",marginBottom:4}}>
-                                  <div style={{height:"100%",width:avancePct+"%",background:y.primary,borderRadius:3}}/>
-                                </div>
-                                <div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:y.text3}}>
-                                  <span>{p.responsable || "—"}</span>
-                                  <span>{avancePct}%</span>
-                                </div>
+              <div style={{overflowX:"auto"}}>
+                <table style={{borderCollapse:"collapse",width:"100%",minWidth:1100}}>
+                  <thead>
+                    <tr style={{background:y.grayBg}}>
+                      {["Cód.","Categoría","Nombre","Área","País","Responsable","Fechas","Avance","Estado","Acciones"].map(h => (
+                        <th key={h} style={{padding:"0.5rem 0.6rem",textAlign:"left",fontSize:10,fontWeight:700,color:y.text3,borderBottom:"2px solid "+y.border2,textTransform:"uppercase",whiteSpace:"nowrap"}}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filtrados.length === 0 && (
+                      <tr><td colSpan={10} style={{padding:"2rem",textAlign:"center",color:y.text3}}>Sin proyectos</td></tr>
+                    )}
+                    {filtrados.map(p => {
+                      const tareasP = tareasPorProyecto[p.id] || [];
+                      const avancePct = Math.round(avanceEfectivo(p, tareasP)*100);
+                      const v = estadoVencimiento(p);
+                      const seleccionado = selectedId === p.id;
+                      return (
+                        <tr key={p.id} onClick={() => setSelectedId(sel => sel === p.id ? null : p.id)} style={{borderBottom:"1px solid "+y.border,cursor:"pointer",background: seleccionado ? y.primaryLight : "transparent"}}>
+                          <td style={{padding:"6px 8px",fontSize:12}}>{p.codigo}</td>
+                          <td style={{padding:"6px 8px",fontSize:12}}>{p.categoria}</td>
+                          <td style={{padding:"6px 8px",fontSize:12,fontWeight:600,maxWidth:260}}>
+                            {seleccionado && <i className="ti ti-chevron-down" style={{color:y.primary,marginRight:4}}/>}
+                            {p.nombre}
+                          </td>
+                          <td style={{padding:"6px 8px",fontSize:12}}>{p.area}</td>
+                          <td style={{padding:"6px 8px",fontSize:12}}>{p.pais_id ? bandera(nombrePais(p.pais_id))+" "+nombrePais(p.pais_id) : ""}</td>
+                          <td style={{padding:"6px 8px",fontSize:12}}>{p.responsable}</td>
+                          <td style={{padding:"6px 8px",fontSize:11,color:y.text3}}>
+                            {p.fecha_inicio}{p.fecha_fin ? " → "+p.fecha_fin : ""}
+                            {v && (
+                              <div style={{marginTop:2,fontSize:10,fontWeight:700,color: v.tipo==="vencido"?y.danger:y.warning}}>
+                                <i className={"ti "+(v.tipo==="vencido"?"ti-alert-triangle":"ti-bell")}/> {v.tipo==="vencido" ? "Vencido hace "+v.dias+"d" : "Vence en "+v.dias+"d"}
                               </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div style={{overflowX:"auto"}}>
-                  <table style={{borderCollapse:"collapse",width:"100%",minWidth:1100}}>
-                    <thead>
-                      <tr style={{background:y.grayBg}}>
-                        {["Cód.","Categoría","Nombre","Área","País","Responsable","Fechas","Avance","Estado","Acciones"].map(h => (
-                          <th key={h} style={{padding:"0.5rem 0.6rem",textAlign:"left",fontSize:10,fontWeight:700,color:y.text3,borderBottom:"2px solid "+y.border2,textTransform:"uppercase",whiteSpace:"nowrap"}}>{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filtrados.length === 0 && (
-                        <tr><td colSpan={10} style={{padding:"2rem",textAlign:"center",color:y.text3}}>Sin proyectos</td></tr>
-                      )}
-                      {filtrados.map(p => {
-                        const tareasP = tareasPorProyecto[p.id] || [];
-                        const avancePct = Math.round(avanceEfectivo(p, tareasP)*100);
-                        const v = estadoVencimiento(p);
-                        return (
-                          <tr key={p.id} style={{borderBottom:"1px solid "+y.border}}>
-                            <td style={{padding:"6px 8px",fontSize:12}}>{p.codigo}</td>
-                            <td style={{padding:"6px 8px",fontSize:12}}>{p.categoria}</td>
-                            <td style={{padding:"6px 8px",fontSize:12,fontWeight:600,maxWidth:260}}>{p.nombre}</td>
-                            <td style={{padding:"6px 8px",fontSize:12}}>{p.area}</td>
-                            <td style={{padding:"6px 8px",fontSize:12}}>{p.pais_id ? bandera(nombrePais(p.pais_id))+" "+nombrePais(p.pais_id) : ""}</td>
-                            <td style={{padding:"6px 8px",fontSize:12}}>{p.responsable}</td>
-                            <td style={{padding:"6px 8px",fontSize:11,color:y.text3}}>
-                              {p.fecha_inicio}{p.fecha_fin ? " → "+p.fecha_fin : ""}
-                              {v && (
-                                <div style={{marginTop:2,fontSize:10,fontWeight:700,color: v.tipo==="vencido"?y.danger:y.warning}}>
-                                  <i className={"ti "+(v.tipo==="vencido"?"ti-alert-triangle":"ti-bell")}/> {v.tipo==="vencido" ? "Vencido hace "+v.dias+"d" : "Vence en "+v.dias+"d"}
-                                </div>
-                              )}
-                            </td>
-                            <td style={{padding:"6px 8px",fontSize:12}}>{avancePct}%{tareasP.length > 0 && <div style={{fontSize:10,color:y.text3}}>{tareasP.filter(t=>t.completada).length}/{tareasP.length} tareas</div>}</td>
-                            <td style={{padding:"6px 8px"}}><Badge label={p.estado || "Pendiente"} /></td>
-                            <td style={{padding:"6px 8px",whiteSpace:"nowrap"}}>
-                              {puedeEditar && <Btn sm onClick={() => setModal({mode:"edit", project:p})}><i className="ti ti-pencil"/></Btn>}{" "}
-                              {puedeEliminar && <Btn sm danger onClick={() => setToDelete(p)}><i className="ti ti-trash"/></Btn>}
-                              {!puedeEditar && !puedeEliminar && <span style={{fontSize:11,color:y.text3}}>—</span>}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+                            )}
+                          </td>
+                          <td style={{padding:"6px 8px",fontSize:12}}>{avancePct}%{tareasP.length > 0 && <div style={{fontSize:10,color:y.text3}}>{tareasP.filter(t=>t.completada).length}/{tareasP.length} tareas</div>}</td>
+                          <td style={{padding:"6px 8px"}}><Badge label={p.estado || "Pendiente"} /></td>
+                          <td style={{padding:"6px 8px",whiteSpace:"nowrap"}} onClick={e => e.stopPropagation()}>
+                            {puedeEditar && <Btn sm onClick={() => setModal({mode:"edit", project:p})}><i className="ti ti-pencil"/></Btn>}{" "}
+                            {puedeEliminar && <Btn sm danger onClick={() => setToDelete(p)}><i className="ti ti-trash"/></Btn>}
+                            {!puedeEditar && !puedeEliminar && <span style={{fontSize:11,color:y.text3}}>—</span>}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </Card>
+
+            {selectedId && filtrados.some(p => p.id === selectedId) && (
+              <PlanAccionPanel
+                proyecto={filtrados.find(p => p.id === selectedId)}
+                tareasProyecto={tareasPorProyecto[selectedId] || []}
+                responsables={responsables}
+                responsablesDisponibles={responsablesDisponibles}
+                puedeEditar={puedeEditar}
+                onTareasChanged={cargarTareas}
+                onClose={() => setSelectedId(null)}
+              />
+            )}
           </React.Fragment>
         )
         )}
@@ -2795,7 +2116,6 @@ function App() {
           editProject={modal.mode === "edit" ? modal.project : null}
           onClose={() => setModal(null)}
           onSaved={() => { setModal(null); cargarDatos(); }}
-          onTareasChanged={cargarTareas}
         />
       )}
       {toDelete && (

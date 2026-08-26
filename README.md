@@ -40,15 +40,16 @@ Si más adelante se quiere cerrar el hueco de verdad (no solo silenciar el aviso
 
 - Pestaña **Reportes** separada, con los KPIs (total, cumplidos, en progreso, pendientes, avance promedio), el resumen por categoría (CI, Power Automate, Nuevo Proyecto) y las alertas de vencimiento — ver sección "Reportes (pestaña separada de Proyectos)" más abajo.
 - Filtros por categoría, estado y país.
-- Vista de tarjetas, vista Kanban (arrastra un proyecto entre columnas para cambiar su estado) y vista de tabla.
+- Una sola tabla de proyectos: al hacer clic en una fila, justo debajo aparece su **Plan de acción** (Cronograma) — ver sección "Tabla de proyectos y Plan de acción" más abajo.
 - Alertas automáticas de vencimiento: la campana del encabezado avisa sola qué proyectos ya vencieron o están por vencer (en los próximos 7 días), calculado con la fecha de fin real — no depende de que alguien cambie el estado a mano. Los proyectos Cumplidos o Cancelados no generan alerta. Al hacer clic en la campana te lleva directo a la pestaña Reportes con el panel de alertas abierto.
-- Comentarios / bitácora por proyecto: dentro de cada proyecto (modo editar) hay una sección para que el equipo deje comentarios con su nombre y fecha, y para borrarlos. Necesita la tabla `proyecto_comentarios` en Supabase (ver instrucciones abajo); si todavía no existe, la app lo indica y el resto sigue funcionando normal.
+- Comentarios / bitácora por proyecto: dentro de cada proyecto (botón "Editar") hay una sección para que el equipo deje comentarios con su nombre y fecha, y para borrarlos. Necesita la tabla `proyecto_comentarios` en Supabase (ver instrucciones abajo); si todavía no existe, la app lo indica y el resto sigue funcionando normal.
 - Roles y permisos propios de esta página (Administrador / Editor / Solo lectura) — ver sección "Menú lateral" abajo.
 - Menú lateral con Usuarios, Accesos, Áreas, Países, Responsables y Carga de trabajo (catálogos e informativas) además de Proyectos — ver sección "Menú lateral" abajo.
 - Agregar proyectos (uno o varios a la vez, mismo formulario tipo pestañas que usas en Hallazgos).
 - Editar y eliminar proyectos.
-- Formulario de proyecto rediseñado (ver secciones más abajo): secciones claras (Datos generales, Asignación, Fechas y estado, Ticket y archivo, Descripción), pestaña de **Cronograma** con línea de tiempo (Gantt), ruta crítica y **matriz RACI** por tarea, pestaña de **Riesgos** con matriz de probabilidad × impacto, pestaña de **Interesados** con matriz de influencia/interés y estrategia de gestión automática, vista de **Carga de trabajo** por persona, y pestaña de **Historial de cambios** que registra automáticamente quién cambió qué y cuándo.
-- Exportar a Excel y a PDF la lista filtrada.
+- Botón "Editar" con Datos del proyecto (secciones Datos generales, Asignación, Fechas y estado, Ticket y archivo, Descripción) y Comentarios — ver sección "Nuevo formulario de proyecto" más abajo.
+- Plan de acción por proyecto (debajo de la tabla, al seleccionarlo): línea de tiempo (Gantt), ruta crítica y **matriz RACI** por tarea, más exportar ese plan a Excel y a PDF — ver sección "Tabla de proyectos y Plan de acción".
+- Exportar a Excel y a PDF la lista completa de proyectos (botones junto a los filtros).
 
 ## Activar los comentarios (una sola vez en Supabase)
 
@@ -68,7 +69,7 @@ alter table proyecto_comentarios disable row level security;
 
 3. Listo — no hace falta reiniciar nada más. En cuanto subas el `index.html` de este paquete, la sección "Comentarios / bitácora" ya podrá guardar y mostrar comentarios reales.
 
-- Roles y permisos propios de esta página: hay tres roles — **Administrador** (acceso total, incluyendo gestionar usuarios), **Editor** (crea y edita proyectos, mueve el Kanban y comenta, pero no puede eliminar) y **Solo lectura** (solo ve, filtra y exporta a Excel). Un usuario Administrador puede asignar el rol de cada quien desde el nuevo botón "Usuarios y permisos" (ícono de personas) en el encabezado. **Importante:** cualquier usuario que todavía no tenga un rol asignado se trata automáticamente como Administrador, así que nadie pierde acceso al activar esta función — tú decides después a quién limitarle el acceso. Necesita la tabla `proyecto_permisos` (ver instrucciones abajo); si no existe, todos siguen funcionando como Administrador sin problema.
+- Roles y permisos propios de esta página: hay tres roles — **Administrador** (acceso total, incluyendo gestionar usuarios), **Editor** (crea y edita proyectos, gestiona el Plan de acción y comenta, pero no puede eliminar) y **Solo lectura** (solo ve, filtra y exporta a Excel). Un usuario Administrador puede asignar el rol de cada quien desde el nuevo botón "Usuarios y permisos" (ícono de personas) en el encabezado. **Importante:** cualquier usuario que todavía no tenga un rol asignado se trata automáticamente como Administrador, así que nadie pierde acceso al activar esta función — tú decides después a quién limitarle el acceso. Necesita la tabla `proyecto_permisos` (ver instrucciones abajo); si no existe, todos siguen funcionando como Administrador sin problema.
 
 ## Activar los roles y permisos (una sola vez en Supabase)
 
@@ -96,7 +97,7 @@ Ahora la página tiene un menú a la izquierda con 6 secciones:
 - **Países** — mismo catálogo de países que ya usa el resto de Kielsa CI; aquí se puede agregar, editar o eliminar (solo Administradores).
 - **Responsables** — catálogo de responsables. En el formulario de "Agregar/Editar proyecto", el campo Responsable ahora es una lista desplegable que se llena con este catálogo, en vez de tener que escribirlo a mano cada vez (solo Administradores gestionan el catálogo; cualquiera con permiso de editar proyectos puede elegir de la lista al crear/editar un proyecto).
 - **Reportes** — KPIs, resumen por categoría y alertas de vencimiento, en su propia pestaña separada de Proyectos (ver sección "Reportes (pestaña separada de Proyectos)" más abajo).
-- **Proyectos** — filtros, vista de tarjetas/Kanban/tabla, agregar/editar/eliminar y exportar a Excel/PDF. Esta y Reportes son las únicas secciones que ven los usuarios Editor y Solo lectura.
+- **Proyectos** — filtros, tabla de proyectos con su Plan de acción al seleccionar uno, agregar/editar/eliminar y exportar a Excel/PDF. Esta y Reportes son las únicas secciones que ven los usuarios Editor y Solo lectura.
 
 **Nota:** si las tablas de Áreas o Responsables todavía no existen en Supabase (ver instrucciones abajo), la app no se rompe: el campo Área usa una lista fija como antes y el campo Responsable vuelve a ser de texto libre, hasta que actives las tablas.
 
@@ -154,21 +155,31 @@ alter table proyecto_usuario_paises disable row level security;
 
 Junto al botón de Excel hay uno nuevo de **PDF**: descarga exactamente la misma lista de proyectos que se ve filtrada en pantalla (mismas columnas que el Excel), en un PDF horizontal listo para imprimir o compartir.
 
-## Nuevo formulario de proyecto y Cronograma
+## Nuevo formulario de proyecto
 
-Rediseñé por completo el formulario de "Agregar/Editar proyecto" con el formato clásico por secciones que me pediste, usando como referencia el Excel que me compartiste. Al editar un proyecto ahora hay tres pestañas:
+Rediseñé el formulario de "Agregar/Editar proyecto" con el formato clásico por secciones que me pediste, usando como referencia el Excel que me compartiste. Al editar un proyecto ahora hay dos pestañas:
 
 - **Datos del proyecto** — organizado en secciones: Datos generales (código, categoría, prioridad, nombre), Asignación (área, país, responsable), Fechas y estado (fecha de solicitud, fecha de inicio, vencimiento, estado y avance), Ticket y archivo (ticket, archivo/documento) y Descripción. Abajo del todo se ve un pequeño texto con la fecha y el usuario de la última actualización.
-- **Cronograma** — la tabla de tareas del proyecto, estilo Gantt: cada tarea tiene número EDT (automático, según el orden), responsable, de qué otra tarea depende, fecha de inicio y de entrega, días de duración (calculados solos), % de avance y estatus (Pendiente / En proceso / Completada). Si una tarea no está completada y ya pasó su fecha de entrega, el sistema la marca sola como **Vencida** en rojo, sin que nadie tenga que cambiarla a mano. El avance general del proyecto ahora es el promedio del % de avance de todas sus tareas (antes solo contaba tareas completas vs. incompletas).
-- **Comentarios** — la misma bitácora de comentarios de antes, ahora en su propia pestaña.
+- **Comentarios** — la bitácora de comentarios de siempre.
 
-Al agregar un proyecto nuevo (una o varias a la vez) se ve solo la pestaña "Datos del proyecto" — el Cronograma se agrega después de crear el proyecto, desde "Editar".
+El Cronograma / Plan de acción **ya no vive dentro de este formulario** — se maneja aparte, debajo de la tabla de proyectos, para poder verlo sin tener que abrir un modal (ver la siguiente sección). Al agregar un proyecto nuevo (una o varias a la vez) se ve solo la pestaña "Datos del proyecto"; el Plan de acción se agrega después de crear el proyecto, seleccionándolo en la tabla.
 
-## Línea de tiempo (Gantt) y ruta crítica
+## Tabla de proyectos y Plan de acción
+
+Por pedido tuyo, la pantalla de Proyectos se simplificó: ya no hay vistas de Tarjetas ni Kanban, solo la tabla. Al hacer clic en cualquier fila de la tabla, justo debajo aparece una tarjeta nueva, **"Plan de acción — [nombre del proyecto]"**, con todo el Cronograma de ese proyecto: línea de tiempo (Gantt), ruta crítica, matriz RACI y la tabla de tareas con botones para agregar, editar y eliminar (según tu rol). Hacer clic en la misma fila otra vez, o en el botón "Cerrar" del panel, lo oculta. Seleccionar otro proyecto cambia el panel para mostrar el plan de ese proyecto.
+
+Dentro del Plan de acción hay dos botones de exportación propios de ese proyecto:
+
+- **Excel** — descarga un archivo con el nombre del proyecto y su cronograma completo (EDT, tarea, responsable, fechas, % de avance, estatus).
+- **PDF** — genera un informe en PDF del plan de acción, con la misma tabla de tareas y el avance general del proyecto.
+
+Estos son aparte de los botones de Excel/PDF que ya existían junto a los filtros, que siguen exportando la **lista completa de proyectos** (no el plan de uno solo).
+
+### Línea de tiempo (Gantt) y ruta crítica
 
 A partir del diagnóstico que te mandé comparando la app contra estándares internacionales de gestión de proyectos (PMBOK/ISO 21500), lo primero que implementamos fue lo que marcamos como más prioritario: una línea de tiempo visual y el cálculo automático de la ruta crítica.
 
-Ahora, arriba de la tabla del Cronograma (siempre que el proyecto tenga al menos una tarea), aparece un pequeño Gantt: cada tarea es una barra horizontal ubicada según su fecha de inicio y de entrega, con el color de su estatus y una franja más clara que muestra su % de avance. Si una tarea todavía no tiene fecha de inicio o de entrega, aparece como "Sin fechas" en vez de una barra, para no dañar la escala del resto.
+Ahora, arriba de la tabla de tareas del Plan de acción (siempre que el proyecto tenga al menos una tarea), aparece un pequeño Gantt: cada tarea es una barra horizontal ubicada según su fecha de inicio y de entrega, con el color de su estatus y una franja más clara que muestra su % de avance. Si una tarea todavía no tiene fecha de inicio o de entrega, aparece como "Sin fechas" en vez de una barra, para no dañar la escala del resto.
 
 Encima de esas barras, las tareas que están en **ruta crítica** se resaltan en rojo con un ícono de alerta, tanto en el Gantt como en la fila de la tabla. La ruta crítica es la cadena de tareas dependientes entre sí (tarea → de qué depende → de qué depende esa...) que termina en la fecha de entrega más tardía del proyecto: si cualquiera de esas tareas se atrasa, se atrasa el proyecto completo. Como hoy cada tarea solo puede depender de una tarea anterior, el cálculo es directo; si más adelante quieres que una tarea dependa de varias a la vez (como permite el estándar), lo ampliamos.
 
@@ -195,38 +206,7 @@ alter table proyecto_tareas add column if not exists estatus text default 'Pendi
 alter table proyecto_tareas add column if not exists depende_id bigint;
 ```
 
-3. Listo. En cuanto subas el `index.html` de este paquete, el formulario de proyecto ya se ve con las pestañas nuevas y la pestaña Cronograma ya puede guardar tareas con responsable, fechas, dependencia, % de avance y estatus.
-
-## Registro de riesgos
-
-Segunda mejora del diagnóstico de estándares internacionales: ahora cada proyecto tiene, junto a Cronograma y Comentarios, una pestaña **Riesgos**. Se usa igual que el Cronograma — un botón "Agregar riesgo" abre un formulario con la descripción del riesgo, probabilidad (Baja/Media/Alta), impacto (Bajo/Medio/Alto), responsable de darle seguimiento, plan de mitigación y estado (Abierto/Mitigado/Cerrado/Ocurrió).
-
-El **nivel** de cada riesgo (Bajo, Medio o Alto) se calcula solo combinando probabilidad e impacto, con la matriz que usan los estándares de gestión de riesgos (probabilidad × impacto, en una escala de 1 a 9): por ejemplo, un riesgo con probabilidad Alta e impacto Alto sale automáticamente en nivel Alto, mientras que uno con probabilidad Baja e impacto Bajo sale en nivel Bajo. Cuando un proyecto tiene algún riesgo de nivel Alto que sigue Abierto, aparece un aviso destacado en rojo arriba de la tabla para que no se pierda de vista.
-
-### Activar el registro de riesgos (una sola vez en Supabase)
-
-Esta sí es una tabla nueva, así que además de crearla hay que quitarle la seguridad a nivel de fila y darle permisos al usuario que usa la app (igual que con Áreas, Responsables y las demás tablas nuevas que ya activaste):
-
-1. Entra a supabase.com → tu proyecto → **SQL Editor** → **New query**.
-2. Pega y ejecuta (botón **Run**) exactamente esto:
-
-```sql
-create table proyecto_riesgos (
-  id bigint generated by default as identity primary key,
-  "proyectoId" bigint not null,
-  nombre text not null,
-  probabilidad text default 'Media',
-  impacto text default 'Medio',
-  responsable text,
-  mitigacion text,
-  estado text default 'Abierto',
-  "createdAt" timestamptz not null default now()
-);
-alter table proyecto_riesgos disable row level security;
-grant select, insert, update, delete on proyecto_riesgos to anon, authenticated;
-```
-
-3. Listo. En cuanto subas el `index.html` de este paquete, la pestaña "Riesgos" de cada proyecto ya podrá crear, editar y eliminar riesgos.
+3. Listo. En cuanto subas el `index.html` de este paquete, el formulario de proyecto ya se ve con las secciones nuevas y el Plan de acción (debajo de la tabla, al seleccionar un proyecto) ya puede guardar tareas con responsable, fechas, dependencia, % de avance y estatus.
 
 ## Carga de trabajo por persona
 
@@ -234,40 +214,11 @@ Tercera mejora del diagnóstico: en el menú lateral hay un ítem nuevo, **Carga
 
 Esta vista **no necesita ninguna tabla ni columna nueva en Supabase** — usa exactamente las mismas tareas del Cronograma que ya se cargan para las alertas y el avance de cada proyecto, solo que agrupadas de otra forma. En cuanto subas el `index.html` de este paquete, "Carga de trabajo" ya funciona.
 
-## Registro de cambios
-
-Cuarta mejora del diagnóstico: cada proyecto ahora tiene, junto a Cronograma, Riesgos y Comentarios, una pestaña **Historial de cambios**. A diferencia de las demás, esta no tiene formulario ni botón — se llena sola cada vez que guardas una edición al proyecto: la app compara los datos de antes y después de guardar (código, categoría, prioridad, área, país, responsable, estado, fechas y ticket) y, por cada campo que haya cambiado, agrega una fila con la fecha, quién hizo el cambio, el campo, el valor anterior (tachado) y el valor nuevo. Si no cambió nada relevante en ese guardado, no se agrega ninguna fila.
-
-Esto responde a lo que piden los estándares de gestión de proyectos como control de cambios / trazabilidad: poder ver quién cambió qué y cuándo, sin depender de que alguien lo anote a mano en un comentario. Es de solo lectura — no se puede editar ni borrar una fila del historial una vez creada, para que sirva como bitácora confiable.
-
-### Activar el registro de cambios (una sola vez en Supabase)
-
-Esta también es una tabla nueva, así que hay que quitarle la seguridad a nivel de fila y darle permisos al usuario que usa la app (igual que con Riesgos):
-
-1. Entra a supabase.com → tu proyecto → **SQL Editor** → **New query**.
-2. Pega y ejecuta (botón **Run**) exactamente esto:
-
-```sql
-create table proyecto_cambios (
-  id bigint generated by default as identity primary key,
-  "proyectoId" bigint not null,
-  campo text not null,
-  valor_anterior text,
-  valor_nuevo text,
-  usuario text,
-  "createdAt" timestamptz not null default now()
-);
-alter table proyecto_cambios disable row level security;
-grant select, insert, update, delete on proyecto_cambios to anon, authenticated;
-```
-
-3. Listo. En cuanto subas el `index.html` de este paquete, la pestaña "Historial de cambios" de cada proyecto empezará a registrar automáticamente cada edición que se guarde a partir de ese momento (los cambios hechos antes de activar la tabla no se pueden recuperar, porque no se guardaron en ningún lado).
-
 ## Matriz RACI por tarea
 
-Quinta mejora del diagnóstico: dentro de la pestaña Cronograma, cada tarea ahora tiene su propia mini "matriz RACI" además del Responsable de siempre. Al agregar o editar una tarea vas a ver una sección nueva, "Matriz RACI de la tarea", con tres campos: **Aprobador** (quien rinde cuentas por el resultado — se elige del mismo catálogo de Responsables), **Consultados** (a quién se le pide opinión antes o durante la tarea) e **Informados** (a quién se le avisa del avance o resultado, sin que participe directamente) — estos dos últimos son de texto libre, para poner uno o varios nombres separados por coma.
+Dentro del Plan de acción de cada proyecto, cada tarea tiene su propia mini "matriz RACI" además del Responsable de siempre. Al agregar o editar una tarea vas a ver una sección, "Matriz RACI de la tarea", con tres campos: **Aprobador** (quien rinde cuentas por el resultado — se elige del mismo catálogo de Responsables), **Consultados** (a quién se le pide opinión antes o durante la tarea) e **Informados** (a quién se le avisa del avance o resultado, sin que participe directamente) — estos dos últimos son de texto libre, para poner uno o varios nombres separados por coma.
 
-Para verlos todos juntos sin tener que abrir tarea por tarea, arriba de la tabla del Cronograma hay un botón **"Ver matriz RACI"** que despliega una tabla compacta con una fila por tarea y una columna por cada letra (R/A/C/I), con su leyenda arriba. Esto responde a lo que piden los estándares de gestión de proyectos sobre roles y responsabilidades claras: quién ejecuta (R, el Responsable de siempre) no tiene por qué ser lo mismo que quién aprueba (A), y ambos son distintos de a quién solo se consulta o se informa.
+Para verlos todos juntos sin tener que abrir tarea por tarea, arriba de la tabla de tareas hay un botón **"Ver matriz RACI"** que despliega una tabla compacta con una fila por tarea y una columna por cada letra (R/A/C/I), con su leyenda arriba. Esto responde a lo que piden los estándares de gestión de proyectos sobre roles y responsabilidades claras: quién ejecuta (R, el Responsable de siempre) no tiene por qué ser lo mismo que quién aprueba (A), y ambos son distintos de a quién solo se consulta o se informa.
 
 ### Activar la matriz RACI (una sola vez en Supabase)
 
@@ -284,51 +235,18 @@ alter table proyecto_tareas add column if not exists informados text;
 
 3. Listo. En cuanto subas el `index.html` de este paquete, el formulario de tareas ya muestra los campos de Aprobador/Consultados/Informados, y el botón "Ver matriz RACI" ya funciona.
 
-## Registro de interesados
+## Riesgos, Interesados e Historial de cambios (quitados)
 
-Sexta y última mejora del diagnóstico: ahora cada proyecto tiene, junto a Cronograma, Riesgos y Comentarios, una pestaña **Interesados**. Un botón "Agregar interesado" abre un formulario con: nombre del interesado, tipo (Interno/Externo), rol o relación con el proyecto, influencia (poder que tiene sobre el proyecto: Baja/Media/Alta), interés (qué tanto le afecta o le importa el resultado: Bajo/Medio/Alto), contacto (opcional) y notas sobre la estrategia de gestión.
+Habíamos agregado, dentro del formulario de proyecto, una pestaña de Riesgos (matriz probabilidad × impacto), una de Interesados (matriz influencia/interés con estrategia de gestión automática) y una de Historial de cambios (registro automático de quién cambió qué). Por pedido tuyo, quité las tres pestañas y todo su código de la app — ya no aparecen en ningún lado.
 
-La **estrategia de gestión** se calcula sola combinando influencia e interés, con la matriz de poder/interés clásica que usa PMBOK (a veces llamada matriz de Mendelow) para priorizar a quién atender:
-
-- **Gestionar de cerca** — alta influencia y alto interés: son quienes más pueden afectar el proyecto y más lo siguen de cerca.
-- **Mantener satisfecho** — alta influencia pero bajo interés: hay que cuidarlos aunque no estén pendientes del día a día, porque pueden frenar el proyecto si se molestan.
-- **Mantener informado** — bajo poder pero alto interés: no deciden, pero conviene tenerlos al tanto.
-- **Monitorear** — bajo poder y bajo interés: basta con vigilarlos de lejos, sin invertirles mucho esfuerzo.
-
-Cuando un proyecto tiene algún interesado en "Gestionar de cerca", aparece un aviso destacado en rojo arriba de la tabla, igual que con los riesgos de nivel Alto — para que no se pierda de vista a quien más puede afectar el proyecto.
-
-### Activar el registro de interesados (una sola vez en Supabase)
-
-Esta es una tabla nueva, así que hay que quitarle la seguridad a nivel de fila y darle permisos al usuario que usa la app (igual que con Riesgos y Registro de cambios):
-
-1. Entra a supabase.com → tu proyecto → **SQL Editor** → **New query**.
-2. Pega y ejecuta (botón **Run**) exactamente esto:
-
-```sql
-create table proyecto_interesados (
-  id bigint generated by default as identity primary key,
-  "proyectoId" bigint not null,
-  nombre text not null,
-  tipo text default 'Interno',
-  rol text,
-  influencia text default 'Media',
-  interes text default 'Medio',
-  contacto text,
-  notas text,
-  "createdAt" timestamptz not null default now()
-);
-alter table proyecto_interesados disable row level security;
-grant select, insert, update, delete on proyecto_interesados to anon, authenticated;
-```
-
-3. Listo. En cuanto subas el `index.html` de este paquete, la pestaña "Interesados" de cada proyecto ya podrá crear, editar y eliminar interesados.
+Si en algún momento corriste el SQL que creaba las tablas `proyecto_riesgos`, `proyecto_interesados` y `proyecto_cambios` en Supabase, no hace falta que las borres — se quedan ahí sin usarse, sin ningún efecto sobre el resto de la app (igual que se hizo antes con Presupuesto/Gasto real). Si prefieres borrarlas también de la base de datos, dímelo y te paso el `drop table` correspondiente — esa sí es una operación que borra datos, así que la dejo fuera de las instrucciones automáticas.
 
 ## Reportes (pestaña separada de Proyectos)
 
-Antes, los KPIs, el resumen por categoría y las alertas de vencimiento aparecían arriba de la lista de proyectos, todo en la misma pantalla. Ahora están en su propia pestaña, **Reportes**, separada de **Proyectos** en el menú lateral — para que la pantalla de Proyectos quede solo con los filtros y la lista (tarjetas/Kanban/tabla) que usas para trabajar día a día, sin tener que hacer scroll pasando los KPIs cada vez.
+Antes, los KPIs, el resumen por categoría y las alertas de vencimiento aparecían arriba de la lista de proyectos, todo en la misma pantalla. Ahora están en su propia pestaña, **Reportes**, separada de **Proyectos** en el menú lateral — para que la pantalla de Proyectos quede solo con los filtros y la tabla que usas para trabajar día a día, sin tener que hacer scroll pasando los KPIs cada vez.
 
 - **Reportes** — KPIs (total, cumplidos, en progreso, pendientes, avance promedio), resumen por categoría y el panel de alertas de vencimiento.
-- **Proyectos** — filtros (categoría, estado, país), botones de Excel/PDF/Agregar proyecto, y la lista en vista de tarjetas, Kanban o tabla.
+- **Proyectos** — filtros (categoría, estado, país), botones de Excel/PDF/Agregar proyecto, y la tabla (selecciona una fila para ver su Plan de acción debajo).
 
 Se conservan los dos atajos que ya tenías, ahora cruzando entre pestañas:
 
@@ -384,3 +302,5 @@ Después de quitar el costo del proyecto probé: que la pestaña "Datos del proy
 Con la separación de Reportes probé, con capturas de pantalla: que al entrar la pantalla de Proyectos se vea solo con filtros y lista, sin KPIs ni resumen por categoría; que la pestaña Reportes muestre solo los KPIs, el resumen por categoría y las alertas, sin filtros ni lista; que hacer clic en una tarjeta de categoría (por ejemplo "CI") navegue a Proyectos con esa categoría ya filtrada (de 2 proyectos bajó a 1, el que es de categoría CI); y que hacer clic en la campana de alertas navegue a Reportes con el panel de alertas abierto. Todo sin errores de consola.
 
 Con el logo y el rediseño del login probé, con capturas de pantalla: que el logo de Kielsa se vea en la pantalla de login (arriba de "Kielsa CI — Proyectos") y en el encabezado de la app ya adentro; que el fondo, la tarjeta, los campos y el botón "Entrar →" tengan el mismo estilo que la app principal de Kielsa CI; que "Desarrollado por Donny Rojas" se vea debajo del botón "Entrar →" en el login y también como pie de página después de iniciar sesión; y que escribir una clave incorrecta muestre el aviso rojo "Usuario y clave incorrectas" con el mismo estilo que en Kielsa CI. Todo sin errores de consola.
+
+Con el rediseño de la tabla y el Plan de acción probé, con capturas de pantalla: que la pantalla de Proyectos muestre solo la tabla (sin botones de Tarjetas ni Kanban); que hacer clic en una fila la resalte y despliegue debajo la tarjeta "Plan de acción — [nombre]" con el Gantt, la ruta crítica, la tabla de tareas y el avance general; que el botón "Ver matriz RACI" del panel muestre y oculte la tabla RACI correctamente; que agregar una tarea nueva desde el panel la refleje de inmediato en el Gantt, en la tabla de tareas, y también actualice el % de avance y el conteo de tareas de esa fila en la tabla de proyectos; que seleccionar un segundo proyecto cambie el panel para mostrar su propio plan (sin mezclar tareas de otro proyecto); que hacer clic en la misma fila otra vez, o en "Cerrar", oculte el panel; que los botones "Excel" y "PDF" del panel descarguen el cronograma de ese proyecto (nombre del proyecto + tabla de tareas) sin errores; y que el botón "Editar" siga abriendo el formulario, ahora con solo dos pestañas (Datos del proyecto y Comentarios) y sin rastro de Riesgos, Interesados ni Historial de cambios. Todo sin errores de consola.
