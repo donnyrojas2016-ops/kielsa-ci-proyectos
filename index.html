@@ -548,7 +548,7 @@ function PlanAccionPanel({ proyecto, tareasProyecto, responsables, responsablesD
           <React.Fragment>
             <Btn sm onClick={exportarPlanExcel}><i className="ti ti-file-spreadsheet"/> Excel</Btn>
             <Btn sm onClick={exportarPlanPDF}><i className="ti ti-file-type-pdf"/> PDF</Btn>
-            <Btn sm onClick={onClose}><i className="ti ti-x"/> Cerrar</Btn>
+            {onClose && <Btn sm onClick={onClose}><i className="ti ti-x"/> Cerrar</Btn>}
           </React.Fragment>
         }
       />
@@ -643,7 +643,7 @@ function PlanAccionPanel({ proyecto, tareasProyecto, responsables, responsablesD
   );
 }
 
-function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, responsables, responsablesDisponibles, editProject, onClose, onSaved }) {
+function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, responsables, responsablesDisponibles, editProject, tareasProyecto = [], onTareasChanged, puedeEditar = true, onClose, onSaved }) {
   const [drafts, setDrafts] = useState(() => editProject ? [{ ...editProject }] : [nuevoProyecto()]);
   const [active, setActive] = useState(0);
   const [saving, setSaving] = useState(false);
@@ -1030,6 +1030,23 @@ function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, respon
                     </table>
                   </div>
                 )}
+              </React.Fragment>
+            )}
+
+            {editProject && (
+              <React.Fragment>
+                <SectionTitle>Plan de acción</SectionTitle>
+                <div style={{fontSize:11.5,color:y.text3,marginBottom:10}}>
+                  Agrega, edita o elimina aquí las tareas del plan de acción de este proyecto. Los cambios de las tareas se guardan de inmediato, sin necesidad de hacer clic en "Guardar cambios".
+                </div>
+                <PlanAccionPanel
+                  proyecto={editProject}
+                  tareasProyecto={tareasProyecto}
+                  responsables={responsables}
+                  responsablesDisponibles={responsablesDisponibles}
+                  puedeEditar={puedeEditar}
+                  onTareasChanged={onTareasChanged}
+                />
               </React.Fragment>
             )}
 
@@ -2164,6 +2181,9 @@ function App() {
           responsables={responsables}
           responsablesDisponibles={responsablesDisponibles}
           editProject={modal.mode === "edit" ? modal.project : null}
+          tareasProyecto={modal.mode === "edit" ? (tareasPorProyecto[modal.project.id] || []) : []}
+          onTareasChanged={cargarTareas}
+          puedeEditar={puedeEditar}
           onClose={() => setModal(null)}
           onSaved={() => { setModal(null); cargarDatos(); }}
         />
