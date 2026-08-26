@@ -2052,7 +2052,8 @@ function App() {
                       const v = estadoVencimiento(p);
                       const seleccionado = selectedId === p.id;
                       return (
-                        <tr key={p.id} onClick={() => setSelectedId(sel => sel === p.id ? null : p.id)} style={{borderBottom:"1px solid "+y.border,cursor:"pointer",background: seleccionado ? y.primaryLight : "transparent"}}>
+                        <React.Fragment key={p.id}>
+                        <tr onClick={() => setSelectedId(sel => sel === p.id ? null : p.id)} style={{borderBottom: seleccionado ? "none" : "1px solid "+y.border,cursor:"pointer",background: seleccionado ? y.primaryLight : "transparent"}}>
                           <td style={{padding:"6px 8px",fontSize:12}}>{p.codigo}</td>
                           <td style={{padding:"6px 8px",fontSize:12}}>{p.categoria}</td>
                           <td style={{padding:"6px 8px",fontSize:12,fontWeight:600,maxWidth:260}}>
@@ -2078,24 +2079,28 @@ function App() {
                             {!puedeEditar && !puedeEliminar && <span style={{fontSize:11,color:y.text3}}>—</span>}
                           </td>
                         </tr>
+                        {seleccionado && (
+                          <tr>
+                            <td colSpan={10} style={{padding:"0.75rem 0.6rem",background:y.grayBg,borderBottom:"1px solid "+y.border}}>
+                              <PlanAccionPanel
+                                proyecto={p}
+                                tareasProyecto={tareasP}
+                                responsables={responsables}
+                                responsablesDisponibles={responsablesDisponibles}
+                                puedeEditar={puedeEditar}
+                                onTareasChanged={cargarTareas}
+                                onClose={() => setSelectedId(null)}
+                              />
+                            </td>
+                          </tr>
+                        )}
+                        </React.Fragment>
                       );
                     })}
                   </tbody>
                 </table>
               </div>
             </Card>
-
-            {selectedId && filtrados.some(p => p.id === selectedId) && (
-              <PlanAccionPanel
-                proyecto={filtrados.find(p => p.id === selectedId)}
-                tareasProyecto={tareasPorProyecto[selectedId] || []}
-                responsables={responsables}
-                responsablesDisponibles={responsablesDisponibles}
-                puedeEditar={puedeEditar}
-                onTareasChanged={cargarTareas}
-                onClose={() => setSelectedId(null)}
-              />
-            )}
           </React.Fragment>
         )
         )}
