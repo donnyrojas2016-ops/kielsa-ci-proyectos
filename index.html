@@ -116,55 +116,6 @@ function duracionDias(inicio, entrega) {
   return Math.round((b - a) / 86400000);
 }
 
-// Rango de fechas (mín. inicio, máx. entrega) entre las tareas que sí tienen ambas fechas.
-// Sirve para dibujar la línea de tiempo del Cronograma.
-function rangoFechasTareas(tareas) {
-  let min = null, max = null;
-  tareas.forEach(t => {
-    if (!t.fecha_inicio || !t.fecha_entrega) return;
-    const a = new Date(t.fecha_inicio + "T00:00:00");
-    const b = new Date(t.fecha_entrega + "T00:00:00");
-    if (isNaN(a.getTime()) || isNaN(b.getTime())) return;
-    if (!min || a < min) min = a;
-    if (!max || b > max) max = b;
-  });
-  return { min, max };
-}
-
-// Ruta crítica: como cada tarea solo puede depender de UNA tarea anterior, la estructura de
-// dependencias es un "bosque" (cada tarea tiene 0 o 1 padre, pero puede tener varias tareas
-// que dependan de ella). La ruta crítica es la cadena de tareas dependientes entre sí que
-// termina en la fecha de entrega más tardía del proyecto — es decir, la cadena que marca
-// la fecha de fin real del proyecto: si cualquier tarea de esa cadena se atrasa, se
-// atrasa el proyecto completo. Devuelve un Set con los id de las tareas en esa ruta.
-function calcularRutaCritica(tareas) {
-  const critico = new Set();
-  const conFecha = tareas.filter(t => t.fecha_entrega);
-  if (conFecha.length === 0) return critico;
-  let maxFin = null;
-  conFecha.forEach(t => {
-    const f = new Date(t.fecha_entrega + "T00:00:00");
-    if (!isNaN(f.getTime()) && (!maxFin || f > maxFin)) maxFin = f;
-  });
-  if (!maxFin) return critico;
-  const porId = {};
-  tareas.forEach(t => { porId[t.id] = t; });
-  // Desde cada tarea "hoja" cuya entrega coincide con la fecha máxima, camina hacia atrás
-  // (tarea → su predecesora → la predecesora de esa...) marcando toda la cadena.
-  conFecha.forEach(t => {
-    const f = new Date(t.fecha_entrega + "T00:00:00");
-    if (isNaN(f.getTime()) || f.getTime() !== maxFin.getTime()) return;
-    let actual = t;
-    let vueltas = 0;
-    while (actual && !critico.has(actual.id) && vueltas < tareas.length + 1) {
-      critico.add(actual.id);
-      actual = actual.depende_id ? porId[actual.depende_id] : null;
-      vueltas++;
-    }
-  });
-  return critico;
-}
-
 // Si el proyecto tiene tareas (Cronograma), el avance se calcula solo: promedio del % de avance de cada tarea.
 // Si no tiene tareas todavía, se usa el % que la persona escribió a mano (compatibilidad con proyectos existentes).
 function avanceEfectivo(proyecto, tareasDelProyecto) {
@@ -315,65 +266,6 @@ function SectionTitle({ children, first }) {
   );
 }
 
-/* ---------- Línea de tiempo (Gantt) del Cronograma, con ruta crítica resaltada ---------- */
-const MESES_CORTOS = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
-function GanttChart({ tareas, criticalSet }) {
-  const { min, max } = rangoFechasTareas(tareas);
-  if (!min || !max) {
-    return <div style={{fontSize:12,color:y.text3,padding:"0.75rem 0 1rem"}}>Agrega fecha de inicio y de entrega a las tareas para ver la línea de tiempo.</div>;
-  }
-  const spanMs = Math.max(max - min, 86400000);
-  const formatoCorto = d => d.getDate() + " " + MESES_CORTOS[d.getMonth()];
-  const marcas = [0, 1/3, 2/3, 1].map(f => new Date(min.getTime() + spanMs * f));
-  const ANCHO_LABEL = 190;
-
-  return (
-    <div style={{border:"1px solid "+y.border,borderRadius:10,padding:"0.9rem 1rem 0.7rem",marginBottom:14,background:y.surface}}>
-      <div style={{display:"flex",justifyContent:"space-between",fontSize:10.5,fontWeight:700,color:y.text3,marginBottom:8,paddingLeft:ANCHO_LABEL}}>
-        {marcas.map((d,i) => <span key={i}>{formatoCorto(d)}</span>)}
-      </div>
-      {tareas.map((t,i) => {
-        const est = estatusEfectivoTarea(t);
-        const [,estColor] = TAREA_ESTADO_COLOR[est] || [y.grayBg, y.gray];
-        const critica = criticalSet && criticalSet.has(t.id);
-        const tieneFechas = !!(t.fecha_inicio && t.fecha_entrega);
-        let left = 0, width = 0;
-        if (tieneFechas) {
-          const a = new Date(t.fecha_inicio + "T00:00:00");
-          const b = new Date(t.fecha_entrega + "T00:00:00");
-          if (!isNaN(a.getTime()) && !isNaN(b.getTime())) {
-            left = ((a - min) / spanMs) * 100;
-            width = Math.max(((b - a) / spanMs) * 100, 1.2);
-          }
-        }
-        const pct = avanceTarea(t);
-        return (
-          <div key={t.id} style={{display:"flex",alignItems:"center",gap:10,marginBottom:7}}>
-            <div style={{width:ANCHO_LABEL,flexShrink:0,fontSize:11.5,color:y.text2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",display:"flex",alignItems:"center",gap:4}} title={t.titulo}>
-              {critica && <i className="ti ti-alert-triangle" style={{color:y.danger,fontSize:12,flexShrink:0}} title="Ruta crítica"/>}
-              <span style={{fontWeight:700,color:y.text3}}>{i+1}.</span> {t.titulo}
-            </div>
-            <div style={{flex:1,position:"relative",height:20,background:y.grayBg,borderRadius:5}}>
-              {tieneFechas ? (
-                <div style={{position:"absolute",top:0,bottom:0,left:left+"%",width:width+"%",borderRadius:5,background: critica ? y.danger : estColor,opacity: critica ? 1 : 0.85,overflow:"hidden"}}>
-                  <div style={{position:"absolute",left:0,top:0,bottom:0,width:pct+"%",background:"rgba(255,255,255,.35)"}}/>
-                </div>
-              ) : (
-                <div style={{fontSize:10,color:y.text3,lineHeight:"20px",paddingLeft:6}}>Sin fechas</div>
-              )}
-            </div>
-          </div>
-        );
-      })}
-      {criticalSet && criticalSet.size > 0 && (
-        <div style={{display:"flex",alignItems:"center",gap:5,fontSize:10.5,color:y.text3,marginTop:8,paddingLeft:ANCHO_LABEL}}>
-          <i className="ti ti-alert-triangle" style={{color:y.danger,fontSize:12}}/> Ruta crítica — si se atrasa cualquiera de estas tareas, se atrasa el proyecto
-        </div>
-      )}
-    </div>
-  );
-}
-
 /* ---------- Formulario de una tarea del Cronograma (agregar o editar) ---------- */
 function TareaForm({ tarea, tareasProyecto, responsables, responsablesDisponibles, onGuardar, onCancelar }) {
   const [titulo, setTitulo] = useState(tarea ? tarea.titulo || "" : "");
@@ -468,7 +360,6 @@ function PlanAccionPanel({ proyecto, tareasProyecto, responsables, responsablesD
   const [cargando, setCargando] = useState(false);
   const [tareaForm, setTareaForm] = useState(null); // null | {mode:"add"} | {mode:"edit", tarea}
 
-  const rutaCritica = useMemo(() => calcularRutaCritica(tareasProyecto), [tareasProyecto]);
   const avancePctTareas = tareasProyecto.length ? Math.round(tareasProyecto.reduce((s,t) => s + avanceTarea(t), 0) / tareasProyecto.length) : 0;
 
   const guardarTarea = async (payload) => {
@@ -575,7 +466,6 @@ function PlanAccionPanel({ proyecto, tareasProyecto, responsables, responsablesD
           <div style={{fontSize:12,color:y.text3,padding:"1rem 0"}}>Sin tareas todavía{puedeEditar ? " — agrega la primera con el botón de arriba." : "."}</div>
         ) : (
           <React.Fragment>
-          <GanttChart tareas={tareasProyecto} criticalSet={rutaCritica} />
           <div style={{overflowX:"auto"}}>
             <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
               <thead>
@@ -592,14 +482,10 @@ function PlanAccionPanel({ proyecto, tareasProyecto, responsables, responsablesD
                   const dias = duracionDias(t.fecha_inicio, t.fecha_entrega);
                   const dep = t.depende_id ? tareasProyecto.findIndex(x => x.id === t.depende_id) : -1;
                   const pct = avanceTarea(t);
-                  const critica = rutaCritica.has(t.id);
                   return (
                     <tr key={t.id} style={{borderBottom:"1px solid "+y.grayBg}}>
                       <td style={{padding:"0.5rem",fontWeight:800,color:y.text3,fontSize:11}}>{i+1}</td>
-                      <td style={{padding:"0.5rem",color:y.text,maxWidth:220}}>
-                        {critica && <i className="ti ti-alert-triangle" style={{color:y.danger,fontSize:12,marginRight:5}} title="Ruta crítica"/>}
-                        {t.titulo}
-                      </td>
+                      <td style={{padding:"0.5rem",color:y.text,maxWidth:220}}>{t.titulo}</td>
                       <td style={{padding:"0.5rem",color:y.text2,whiteSpace:"nowrap"}}>{t.responsable || "—"}</td>
                       <td style={{padding:"0.5rem",color:y.text3,whiteSpace:"nowrap"}}>{dep >= 0 ? "EDT " + (dep+1) : "—"}</td>
                       <td style={{padding:"0.5rem",color:y.text2,whiteSpace:"nowrap"}}>{t.fecha_inicio || "—"}</td>
@@ -645,7 +531,6 @@ function PlanAccionPanel({ proyecto, tareasProyecto, responsables, responsablesD
 
 function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, responsables, responsablesDisponibles, editProject, tareasProyecto = [], onTareasChanged, puedeEditar = true, onClose, onSaved }) {
   const [drafts, setDrafts] = useState(() => editProject ? [{ ...editProject }] : [nuevoProyecto()]);
-  const [active, setActive] = useState(0);
   const [saving, setSaving] = useState(false);
   const [tab, setTab] = useState("datos"); // datos | comentarios (solo aplica en modo edición)
 
@@ -653,14 +538,17 @@ function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, respon
   // Se guarda en memoria por cada borrador (clave d._key) hasta que se guarde el proyecto;
   // en ese momento se crea de verdad en proyecto_tareas con el id real del proyecto recién creado.
   const [draftTareas, setDraftTareas] = useState({}); // { [d._key]: [{id: localId, titulo, ...}] }
-  const [tareaFormDraft, setTareaFormDraft] = useState(null); // null | {mode:"add"} | {mode:"edit", tarea}
+  const [tareaFormDraft, setTareaFormDraft] = useState(null); // null | {mode:"add", key} | {mode:"edit", key, tarea}
+  // Fila del formulario de tabla cuyo Plan de trabajo está desplegado (solo modo "agregar" con varios proyectos).
+  const [planAbiertoKey, setPlanAbiertoKey] = useState(() => !editProject && drafts[0] ? drafts[0]._key : null);
 
   const guardarTareaDraft = (payload) => {
-    const key = current._key;
+    const key = tareaFormDraft && tareaFormDraft.key;
+    if (!key) return;
     setDraftTareas(map => {
       const lista = map[key] || [];
       let nueva;
-      if (tareaFormDraft && tareaFormDraft.mode === "edit") {
+      if (tareaFormDraft.mode === "edit") {
         nueva = lista.map(t => t.id === tareaFormDraft.tarea.id ? { ...t, ...payload } : t);
       } else {
         nueva = [...lista, { id: "local_" + Date.now() + "_" + Math.random(), ...payload }];
@@ -669,8 +557,7 @@ function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, respon
     });
     setTareaFormDraft(null);
   };
-  const eliminarTareaDraft = (tarea) => {
-    const key = current._key;
+  const eliminarTareaDraft = (key, tarea) => {
     setDraftTareas(map => ({ ...map, [key]: (map[key] || []).filter(t => t.id !== tarea.id) }));
   };
 
@@ -736,8 +623,16 @@ function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, respon
   };
 
   const updateField = (idx, key, value) => setDrafts(list => list.map((d, i) => i === idx ? { ...d, [key]: value } : d));
-  const addDraft = () => { const n = drafts.length; setDrafts(list => [...list, nuevoProyecto()]); setActive(n); };
-  const removeDraft = idx => { setDrafts(list => list.filter((_, i) => i !== idx)); setActive(a => Math.min(a, drafts.length - 2)); };
+  const addDraft = () => {
+    const nuevo = nuevoProyecto();
+    setDrafts(list => [...list, nuevo]);
+    setPlanAbiertoKey(nuevo._key);
+  };
+  const removeDraft = idx => {
+    const removido = drafts[idx];
+    if (removido && planAbiertoKey === removido._key) setPlanAbiertoKey(null);
+    setDrafts(list => list.filter((_, i) => i !== idx));
+  };
 
   const normalize = d => {
     const { _key, id, ...rest } = d;
@@ -804,8 +699,11 @@ function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, respon
     }
   };
 
-  const current = drafts[active] || drafts[0];
   const conNombre = drafts.filter(d => d.nombre.trim()).length;
+
+  const thTabla = { textAlign:"left", fontSize:9.5, fontWeight:800, color:y.text3, textTransform:"uppercase", letterSpacing:.3, padding:"0.5rem 0.55rem", borderBottom:"1px solid "+y.border, whiteSpace:"nowrap", background:y.grayBg };
+  const tdTabla = { padding:"0.35rem 0.5rem", verticalAlign:"top" };
+  const inputTabla = { width:"100%", minWidth:82, padding:"0.35rem 0.5rem", fontSize:12, border:"1px solid "+y.border2, borderRadius:6, background:y.surface, color:y.text, outline:"none", fontFamily:"inherit", boxSizing:"border-box" };
 
   return (
     <div style={{position:"fixed",inset:0,background:"rgba(15,23,42,.6)",zIndex:500,display:"flex",flexDirection:"column"}} onClick={e => e.target === e.currentTarget && onClose()}>
@@ -823,28 +721,6 @@ function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, respon
             <button onClick={onClose} style={{background:"rgba(255,255,255,.15)",border:"none",borderRadius:6,color:"#fff",padding:"4px 10px",cursor:"pointer",fontSize:13}}>✕</button>
           </div>
         </div>
-
-        {!editProject && (
-          <div style={{display:"flex",gap:4,padding:"0.6rem 1rem 0",background:y.grayBg,borderBottom:"1px solid "+y.border,overflowX:"auto",flexShrink:0}}>
-            {drafts.map((d, i) => (
-              <div key={d._key} onClick={() => setActive(i)} style={{
-                padding:"0.4rem 1rem",borderRadius:"8px 8px 0 0",cursor:"pointer",fontSize:12,fontWeight:600,
-                background: active === i ? y.surface : "transparent",
-                borderTop: active === i ? "2px solid "+y.primary : "2px solid transparent",
-                borderLeft: active === i ? "1px solid "+y.border : "none",
-                borderRight: active === i ? "1px solid "+y.border : "none",
-                color: active === i ? y.primary : y.text3,
-                display:"flex",alignItems:"center",gap:6,whiteSpace:"nowrap"
-              }}>
-                {d.nombre.trim() ? d.nombre.substring(0,20)+"..." : "Proyecto " + (i+1)}
-                {drafts.length > 1 && active === i && <button onClick={e => { e.stopPropagation(); removeDraft(i); }} style={{background:"none",border:"none",color:y.primary,cursor:"pointer",fontSize:14,padding:0,lineHeight:1}}>×</button>}
-              </div>
-            ))}
-            <button onClick={addDraft} style={{padding:"0.4rem 0.75rem",background:"none",border:"1px dashed "+y.border2,borderRadius:"8px 8px 0 0",cursor:"pointer",color:y.primary,fontSize:12,fontFamily:"inherit",whiteSpace:"nowrap"}}>
-              <i className="ti ti-plus" style={{fontSize:12}}/> Nuevo
-            </button>
-          </div>
-        )}
 
         {editProject && (
           <div style={{display:"flex",gap:22,padding:"0 1.25rem",background:y.grayBg,borderBottom:"1px solid "+y.border,flexShrink:0}}>
@@ -870,158 +746,188 @@ function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, respon
 
         {(!editProject || tab === "datos") && (
           <React.Fragment>
-            <SectionTitle first>Datos generales</SectionTitle>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:12}}>
-              <div>
-                <label style={labelStyle}>Código</label>
-                <input value={current.codigo} onChange={e => updateField(active,"codigo",e.target.value)} style={{...inputStyle,fontSize:12.5}} />
-              </div>
-              <div>
-                <label style={labelStyle}>Categoría</label>
-                <select value={current.categoria} onChange={e => updateField(active,"categoria",e.target.value)} style={{...inputStyle,fontSize:12.5}}>
-                  {CATEGORIAS.map(c => <option key={c}>{c}</option>)}
-                </select>
-              </div>
-              <div>
-                <label style={labelStyle}>Prioridad</label>
-                <select value={current.prioridad} onChange={e => updateField(active,"prioridad",e.target.value)} style={{...inputStyle,fontSize:12.5}}>
-                  <option value={1}>Alta</option>
-                  <option value={2}>Media</option>
-                  <option value={3}>Normal</option>
-                </select>
-              </div>
-            </div>
-            <div>
-              <label style={labelStyle}>Nombre del proyecto *</label>
-              <textarea value={current.nombre} onChange={e => updateField(active,"nombre",e.target.value)} placeholder="Ej: Automatización de conciliaciones bancarias..." rows={2} style={{...inputStyle,width:"100%",fontSize:14,fontWeight:600,lineHeight:1.5,resize:"vertical"}} />
+            <SectionTitle first>{editProject ? "Datos del proyecto" : "Datos de los proyectos"}</SectionTitle>
+            <div style={{overflowX:"auto",border:"1px solid "+y.border,borderRadius:10}}>
+              <table style={{borderCollapse:"collapse",fontSize:12}}>
+                <thead>
+                  <tr>
+                    <th style={thTabla}>#</th>
+                    <th style={{...thTabla,minWidth:120}}>País</th>
+                    <th style={{...thTabla,minWidth:130}}>Categoría</th>
+                    <th style={{...thTabla,minWidth:95}}>Prioridad</th>
+                    <th style={{...thTabla,minWidth:90}}>Código</th>
+                    <th style={{...thTabla,minWidth:230}}>Nombre del proyecto *</th>
+                    <th style={{...thTabla,minWidth:230}}>Descripción</th>
+                    <th style={{...thTabla,minWidth:100}}>Ticket</th>
+                    <th style={{...thTabla,minWidth:160}}>Responsable</th>
+                    <th style={{...thTabla,minWidth:140}}>Área</th>
+                    <th style={{...thTabla,minWidth:150}}>Estado</th>
+                    <th style={{...thTabla,minWidth:95}}>Avance</th>
+                    <th style={{...thTabla,minWidth:135}}>F. solicitud</th>
+                    <th style={{...thTabla,minWidth:135}}>F. inicio</th>
+                    <th style={{...thTabla,minWidth:135}}>Vencimiento</th>
+                    <th style={{...thTabla,minWidth:170}}>Archivo / documento</th>
+                    {!editProject && <th style={{...thTabla,minWidth:150}}>Plan de trabajo</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {drafts.map((d, i) => {
+                    const tareasFila = draftTareas[d._key] || [];
+                    const abierto = planAbiertoKey === d._key;
+                    return (
+                      <tr key={d._key || d.id || i} style={{borderBottom:"1px solid "+y.border}}>
+                        <td style={tdTabla}>
+                          {!editProject && drafts.length > 1 ? (
+                            <button onClick={() => removeDraft(i)} title="Quitar este proyecto" style={{background:"none",border:"none",color:y.text3,cursor:"pointer",fontSize:15,padding:0}}>×</button>
+                          ) : (i + 1)}
+                        </td>
+                        <td style={tdTabla}>
+                          <select value={d.pais_id} onChange={e => updateField(i,"pais_id",e.target.value)} style={inputTabla}>
+                            <option value="">—</option>
+                            {paises.map(p => <option key={p.id} value={p.id}>{bandera(p.nombre)} {p.nombre}</option>)}
+                          </select>
+                        </td>
+                        <td style={tdTabla}>
+                          <select value={d.categoria} onChange={e => updateField(i,"categoria",e.target.value)} style={inputTabla}>
+                            {CATEGORIAS.map(c => <option key={c}>{c}</option>)}
+                          </select>
+                        </td>
+                        <td style={tdTabla}>
+                          <select value={d.prioridad} onChange={e => updateField(i,"prioridad",e.target.value)} style={inputTabla}>
+                            <option value={1}>Alta</option>
+                            <option value={2}>Media</option>
+                            <option value={3}>Normal</option>
+                          </select>
+                        </td>
+                        <td style={tdTabla}>
+                          <input value={d.codigo} onChange={e => updateField(i,"codigo",e.target.value)} style={inputTabla} />
+                        </td>
+                        <td style={tdTabla}>
+                          <textarea value={d.nombre} onChange={e => updateField(i,"nombre",e.target.value)} placeholder="Ej: Automatización de conciliaciones..." rows={2} style={{...inputTabla,minWidth:210,fontWeight:600,resize:"vertical"}} />
+                        </td>
+                        <td style={tdTabla}>
+                          <textarea value={d.observacion} onChange={e => updateField(i,"observacion",e.target.value)} placeholder="Qué se va a hacer, notas..." rows={2} style={{...inputTabla,minWidth:210,resize:"vertical"}} />
+                        </td>
+                        <td style={tdTabla}>
+                          <input value={d.ticket} onChange={e => updateField(i,"ticket",e.target.value)} style={inputTabla} />
+                        </td>
+                        <td style={tdTabla}>
+                          {responsablesDisponibles && responsables && responsables.length > 0 ? (
+                            <select value={d.responsable || ""} onChange={e => updateField(i,"responsable",e.target.value)} style={inputTabla}>
+                              <option value="">—</option>
+                              {d.responsable && !responsables.some(r => r.nombre === d.responsable) && (
+                                <option value={d.responsable}>{d.responsable}</option>
+                              )}
+                              {responsables.map(r => <option key={r.id} value={r.nombre}>{r.nombre}</option>)}
+                            </select>
+                          ) : (
+                            <input value={d.responsable} onChange={e => updateField(i,"responsable",e.target.value)} style={inputTabla} />
+                          )}
+                        </td>
+                        <td style={tdTabla}>
+                          <select value={d.area} onChange={e => updateField(i,"area",e.target.value)} style={inputTabla}>
+                            <option value="">—</option>
+                            {(areasDisponibles && areasCatalogo && areasCatalogo.length > 0 ? areasCatalogo.map(a => a.nombre) : AREAS).map(a => <option key={a}>{a}</option>)}
+                          </select>
+                        </td>
+                        <td style={tdTabla}>
+                          <select value={d.estado} onChange={e => updateField(i,"estado",e.target.value)} style={inputTabla}>
+                            {ESTADOS.map(s => <option key={s}>{s}</option>)}
+                          </select>
+                        </td>
+                        <td style={tdTabla}>
+                          <div style={{display:"flex",alignItems:"center",gap:4}}>
+                            <input type="number" min={0} max={100} value={Math.round((d.avance||0)*100)} onChange={e => updateField(i,"avance",(parseInt(e.target.value)||0)/100)} style={{...inputTabla,width:54,minWidth:54}} />
+                            <span style={{fontSize:11,color:y.text3}}>%</span>
+                          </div>
+                        </td>
+                        <td style={tdTabla}>
+                          <input type="date" value={d.fecha_solicitud||""} onChange={e => updateField(i,"fecha_solicitud",e.target.value)} style={inputTabla} />
+                        </td>
+                        <td style={tdTabla}>
+                          <input type="date" value={d.fecha_inicio} onChange={e => updateField(i,"fecha_inicio",e.target.value)} style={inputTabla} />
+                        </td>
+                        <td style={tdTabla}>
+                          <input type="date" value={d.fecha_fin} onChange={e => updateField(i,"fecha_fin",e.target.value)} style={inputTabla} />
+                        </td>
+                        <td style={tdTabla}>
+                          <input value={d.archivo_nombre||""} onChange={e => updateField(i,"archivo_nombre",e.target.value)} placeholder="Nombre o enlace" style={inputTabla} />
+                        </td>
+                        {!editProject && (
+                          <td style={tdTabla}>
+                            <Btn sm onClick={() => setPlanAbiertoKey(k => k === d._key ? null : d._key)}>
+                              <i className="ti ti-list-check"/> {tareasFila.length} tarea{tareasFila.length === 1 ? "" : "s"}
+                              <i className={"ti " + (abierto ? "ti-chevron-up" : "ti-chevron-down")} style={{marginLeft:2}}/>
+                            </Btn>
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
 
-            <SectionTitle>Asignación</SectionTitle>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
-              <div>
-                <label style={labelStyle}>Área</label>
-                <select value={current.area} onChange={e => updateField(active,"area",e.target.value)} style={{...inputStyle,fontSize:12.5}}>
-                  <option value="">—</option>
-                  {(areasDisponibles && areasCatalogo && areasCatalogo.length > 0 ? areasCatalogo.map(a => a.nombre) : AREAS).map(a => <option key={a}>{a}</option>)}
-                </select>
-              </div>
-              <div>
-                <label style={labelStyle}>País</label>
-                <select value={current.pais_id} onChange={e => updateField(active,"pais_id",e.target.value)} style={{...inputStyle,fontSize:12.5}}>
-                  <option value="">—</option>
-                  {paises.map(p => <option key={p.id} value={p.id}>{bandera(p.nombre)} {p.nombre}</option>)}
-                </select>
-              </div>
-              <div>
-                <label style={labelStyle}>Responsable</label>
-                {responsablesDisponibles && responsables && responsables.length > 0 ? (
-                  <select value={current.responsable || ""} onChange={e => updateField(active,"responsable",e.target.value)} style={{...inputStyle,fontSize:12.5}}>
-                    <option value="">—</option>
-                    {current.responsable && !responsables.some(r => r.nombre === current.responsable) && (
-                      <option value={current.responsable}>{current.responsable}</option>
-                    )}
-                    {responsables.map(r => <option key={r.id} value={r.nombre}>{r.nombre}</option>)}
-                  </select>
-                ) : (
-                  <input value={current.responsable} onChange={e => updateField(active,"responsable",e.target.value)} style={{...inputStyle,fontSize:12.5}} />
-                )}
-              </div>
-            </div>
-
-            <SectionTitle>Fechas y estado</SectionTitle>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:12}}>
-              <div>
-                <label style={labelStyle}>Fecha de solicitud</label>
-                <input type="date" value={current.fecha_solicitud||""} onChange={e => updateField(active,"fecha_solicitud",e.target.value)} style={{...inputStyle,fontSize:12.5}} />
-              </div>
-              <div>
-                <label style={labelStyle}>Fecha de inicio</label>
-                <input type="date" value={current.fecha_inicio} onChange={e => updateField(active,"fecha_inicio",e.target.value)} style={{...inputStyle,fontSize:12.5}} />
-              </div>
-              <div>
-                <label style={labelStyle}>Vencimiento</label>
-                <input type="date" value={current.fecha_fin} onChange={e => updateField(active,"fecha_fin",e.target.value)} style={{...inputStyle,fontSize:12.5}} />
-              </div>
-            </div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-              <div>
-                <label style={labelStyle}>Estado</label>
-                <select value={current.estado} onChange={e => updateField(active,"estado",e.target.value)} style={{...inputStyle,fontSize:12.5}}>
-                  {ESTADOS.map(s => <option key={s}>{s}</option>)}
-                </select>
-              </div>
-              <div>
-                <label style={labelStyle}>Avance{editProject ? " (si el proyecto tiene Plan de acción, ahí se calcula solo)" : ""}</label>
-                <div style={{display:"flex",alignItems:"center",gap:8,marginTop:9}}>
-                  <input type="range" min={0} max={100} value={Math.round((current.avance||0)*100) <= 100 ? Math.round((current.avance||0)*100) : current.avance||0} onChange={e => updateField(active,"avance",parseInt(e.target.value)/100)} style={{flex:1}} />
-                  <span style={{fontSize:12,fontWeight:700,color:y.primary,minWidth:32}}>{Math.round((current.avance||0)*100)}%</span>
-                </div>
-              </div>
-            </div>
-
-            <SectionTitle>Ticket y archivo</SectionTitle>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
-              <div>
-                <label style={labelStyle}>Ticket</label>
-                <input value={current.ticket} onChange={e => updateField(active,"ticket",e.target.value)} style={{...inputStyle,fontSize:12.5}} />
-              </div>
-              <div>
-                <label style={labelStyle}>Archivo / documento</label>
-                <input value={current.archivo_nombre||""} onChange={e => updateField(active,"archivo_nombre",e.target.value)} placeholder="Nombre o enlace del archivo" style={{...inputStyle,fontSize:12.5}} />
-              </div>
-            </div>
-
-            <SectionTitle>Descripción</SectionTitle>
-            <textarea value={current.observacion} onChange={e => updateField(active,"observacion",e.target.value)} rows={3} placeholder="Describe el proyecto: qué se va a hacer, notas u observaciones..." style={{...inputStyle,width:"100%",resize:"vertical",fontSize:12.5,lineHeight:1.6}} />
+            {editProject && (
+              <div style={{fontSize:11,color:y.text3,marginTop:8}}>Si el proyecto tiene Plan de acción (abajo), el Avance se calcula solo a partir de las tareas.</div>
+            )}
 
             {!editProject && (
-              <React.Fragment>
-                <SectionTitle>Plan de trabajo (opcional)</SectionTitle>
+              <div style={{marginTop:10}}>
+                <Btn sm onClick={addDraft}><i className="ti ti-plus"/> Agregar otro proyecto</Btn>
+              </div>
+            )}
+
+            {!editProject && drafts.map((d, i) => planAbiertoKey === d._key && (
+              <div key={d._key} style={{marginTop:14,border:"1px solid "+y.border,borderRadius:10,padding:"0.9rem 1rem",background:y.grayBg}}>
+                <div style={{fontSize:12,fontWeight:700,color:y.text,marginBottom:4}}>
+                  Plan de trabajo (opcional) — {d.nombre.trim() || "Proyecto " + (i + 1)}
+                </div>
                 <div style={{fontSize:11.5,color:y.text3,marginBottom:10}}>
-                  Puedes capturar aquí las tareas del plan de trabajo — se guardan junto con {drafts.length > 1 ? "cada proyecto" : "el proyecto"} al hacer clic en "Guardar". También puedes dejarlo vacío por ahora y agregarlas después, seleccionando el proyecto en la tabla.
+                  Se guarda junto con este proyecto al hacer clic en "Guardar". También puedes dejarlo vacío por ahora y agregar las tareas después, editando el proyecto.
                 </div>
 
-                {tareaFormDraft && (
+                {tareaFormDraft && tareaFormDraft.key === d._key && (
                   <TareaForm
                     tarea={tareaFormDraft.mode === "edit" ? tareaFormDraft.tarea : null}
-                    tareasProyecto={draftTareas[current._key] || []}
+                    tareasProyecto={draftTareas[d._key] || []}
                     responsables={responsables}
                     responsablesDisponibles={responsablesDisponibles}
                     onGuardar={guardarTareaDraft}
                     onCancelar={() => setTareaFormDraft(null)}
                   />
                 )}
-                {!tareaFormDraft && (
-                  <Btn sm onClick={() => setTareaFormDraft({mode:"add"})}><i className="ti ti-plus"/> Agregar tarea al plan</Btn>
+                {!(tareaFormDraft && tareaFormDraft.key === d._key) && (
+                  <Btn sm onClick={() => setTareaFormDraft({mode:"add", key:d._key})}><i className="ti ti-plus"/> Agregar tarea al plan</Btn>
                 )}
 
-                {(draftTareas[current._key] || []).length > 0 && (
+                {(draftTareas[d._key] || []).length > 0 && (
                   <div style={{marginTop:12,overflowX:"auto"}}>
                     <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
                       <thead>
-                        <tr style={{background:y.grayBg}}>
+                        <tr>
                           {["Tarea","Responsable","Inicio","Entrega","% Avance","Estatus",""].map(h => (
-                            <th key={h} style={{textAlign:"left",fontSize:10,fontWeight:800,color:y.text3,textTransform:"uppercase",letterSpacing:.3,padding:"0.5rem 0.5rem",borderBottom:"1px solid "+y.border,whiteSpace:"nowrap"}}>{h}</th>
+                            <th key={h} style={{textAlign:"left",fontSize:10,fontWeight:800,color:y.text3,textTransform:"uppercase",letterSpacing:.3,padding:"0.5rem 0.5rem",borderBottom:"1px solid "+y.border,whiteSpace:"nowrap",background:y.surface}}>{h}</th>
                           ))}
                         </tr>
                       </thead>
                       <tbody>
-                        {(draftTareas[current._key] || []).map(t => {
+                        {(draftTareas[d._key] || []).map(t => {
                           const est = estatusEfectivoTarea(t);
                           const [estBg, estColor] = TAREA_ESTADO_COLOR[est] || [y.grayBg, y.gray];
                           return (
-                            <tr key={t.id} style={{borderBottom:"1px solid "+y.grayBg}}>
-                              <td style={{padding:"0.5rem",color:y.text,maxWidth:220}}>{t.titulo}</td>
-                              <td style={{padding:"0.5rem",color:y.text2,whiteSpace:"nowrap"}}>{t.responsable || "—"}</td>
-                              <td style={{padding:"0.5rem",color:y.text2,whiteSpace:"nowrap"}}>{t.fecha_inicio || "—"}</td>
-                              <td style={{padding:"0.5rem",color:y.text2,whiteSpace:"nowrap"}}>{t.fecha_entrega || "—"}</td>
-                              <td style={{padding:"0.5rem"}}>{avanceTarea(t)}%</td>
-                              <td style={{padding:"0.5rem"}}>
+                            <tr key={t.id} style={{borderBottom:"1px solid "+y.border}}>
+                              <td style={{padding:"0.5rem",color:y.text,maxWidth:220,background:y.surface}}>{t.titulo}</td>
+                              <td style={{padding:"0.5rem",color:y.text2,whiteSpace:"nowrap",background:y.surface}}>{t.responsable || "—"}</td>
+                              <td style={{padding:"0.5rem",color:y.text2,whiteSpace:"nowrap",background:y.surface}}>{t.fecha_inicio || "—"}</td>
+                              <td style={{padding:"0.5rem",color:y.text2,whiteSpace:"nowrap",background:y.surface}}>{t.fecha_entrega || "—"}</td>
+                              <td style={{padding:"0.5rem",background:y.surface}}>{avanceTarea(t)}%</td>
+                              <td style={{padding:"0.5rem",background:y.surface}}>
                                 <span style={{display:"inline-flex",padding:"3px 9px",borderRadius:20,fontSize:10.5,fontWeight:700,background:estBg,color:estColor,whiteSpace:"nowrap"}}>{est}</span>
                               </td>
-                              <td style={{padding:"0.5rem",textAlign:"right",whiteSpace:"nowrap"}}>
-                                <button onClick={() => setTareaFormDraft({mode:"edit", tarea:t})} style={{background:"none",border:"none",color:y.text3,cursor:"pointer",padding:3}} title="Editar"><i className="ti ti-pencil" style={{fontSize:13}}/></button>
-                                <button onClick={() => eliminarTareaDraft(t)} style={{background:"none",border:"none",color:y.text3,cursor:"pointer",padding:3}} title="Eliminar"><i className="ti ti-trash" style={{fontSize:13}}/></button>
+                              <td style={{padding:"0.5rem",textAlign:"right",whiteSpace:"nowrap",background:y.surface}}>
+                                <button onClick={() => setTareaFormDraft({mode:"edit", key:d._key, tarea:t})} style={{background:"none",border:"none",color:y.text3,cursor:"pointer",padding:3}} title="Editar"><i className="ti ti-pencil" style={{fontSize:13}}/></button>
+                                <button onClick={() => eliminarTareaDraft(d._key, t)} style={{background:"none",border:"none",color:y.text3,cursor:"pointer",padding:3}} title="Eliminar"><i className="ti ti-trash" style={{fontSize:13}}/></button>
                               </td>
                             </tr>
                           );
@@ -1030,8 +936,8 @@ function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, respon
                     </table>
                   </div>
                 )}
-              </React.Fragment>
-            )}
+              </div>
+            ))}
 
             {editProject && (
               <React.Fragment>
@@ -1095,7 +1001,7 @@ function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, respon
 
         <div style={{padding:"0.75rem 1.25rem",borderTop:"1px solid "+y.border,display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0,background:y.grayBg}}>
           <span style={{fontSize:12,color:y.text3}}>
-            {editProject ? "Editando proyecto" : "Proyecto " + (active+1) + " de " + drafts.length + " · " + conNombre + " listos para guardar"}
+            {editProject ? "Editando proyecto" : drafts.length + (drafts.length === 1 ? " proyecto · " : " proyectos · ") + conNombre + " listos para guardar"}
           </span>
           <div style={{display:"flex",gap:8}}>
             <Btn onClick={onClose}>Cancelar</Btn>
