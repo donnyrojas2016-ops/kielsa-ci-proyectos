@@ -701,9 +701,9 @@ function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, respon
 
   const conNombre = drafts.filter(d => d.nombre.trim()).length;
 
-  const thTabla = { textAlign:"left", fontSize:9.5, fontWeight:800, color:y.text3, textTransform:"uppercase", letterSpacing:.3, padding:"0.5rem 0.55rem", borderBottom:"1px solid "+y.border, whiteSpace:"nowrap", background:y.grayBg };
-  const tdTabla = { padding:"0.35rem 0.5rem", verticalAlign:"top" };
-  const inputTabla = { width:"100%", minWidth:82, padding:"0.35rem 0.5rem", fontSize:12, border:"1px solid "+y.border2, borderRadius:6, background:y.surface, color:y.text, outline:"none", fontFamily:"inherit", boxSizing:"border-box" };
+  const thTabla = { textAlign:"left", fontSize:10.5, fontWeight:800, color:y.text3, textTransform:"uppercase", letterSpacing:.3, padding:"0.75rem 0.9rem", borderBottom:"2px solid "+y.border2, whiteSpace:"nowrap", background:y.grayBg };
+  const tdTabla = { padding:"0.85rem 0.9rem", verticalAlign:"middle" };
+  const inputTabla = { width:"100%", minWidth:96, padding:"0.5rem 0.65rem", fontSize:12.5, border:"1px solid "+y.border2, borderRadius:7, background:y.surface, color:y.text, outline:"none", fontFamily:"inherit", boxSizing:"border-box", lineHeight:1.4 };
 
   return (
     <div style={{position:"fixed",inset:0,background:"rgba(15,23,42,.6)",zIndex:500,display:"flex",flexDirection:"column"}} onClick={e => e.target === e.currentTarget && onClose()}>
@@ -747,27 +747,27 @@ function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, respon
         {(!editProject || tab === "datos") && (
           <React.Fragment>
             <SectionTitle first>{editProject ? "Datos del proyecto" : "Datos de los proyectos"}</SectionTitle>
-            <div style={{overflowX:"auto",border:"1px solid "+y.border,borderRadius:10}}>
-              <table style={{borderCollapse:"collapse",fontSize:12}}>
+            <div style={{overflowX:"auto",border:"1px solid "+y.border,borderRadius:12,boxShadow:"0 1px 3px rgba(0,0,0,.05)"}}>
+              <table style={{borderCollapse:"collapse",fontSize:12.5}}>
                 <thead>
                   <tr>
                     <th style={thTabla}>#</th>
-                    <th style={{...thTabla,minWidth:120}}>País</th>
-                    <th style={{...thTabla,minWidth:130}}>Categoría</th>
-                    <th style={{...thTabla,minWidth:95}}>Prioridad</th>
-                    <th style={{...thTabla,minWidth:90}}>Código</th>
-                    <th style={{...thTabla,minWidth:230}}>Nombre del proyecto *</th>
-                    <th style={{...thTabla,minWidth:230}}>Descripción</th>
-                    <th style={{...thTabla,minWidth:100}}>Ticket</th>
-                    <th style={{...thTabla,minWidth:160}}>Responsable</th>
-                    <th style={{...thTabla,minWidth:140}}>Área</th>
-                    <th style={{...thTabla,minWidth:150}}>Estado</th>
-                    <th style={{...thTabla,minWidth:95}}>Avance</th>
-                    <th style={{...thTabla,minWidth:135}}>F. solicitud</th>
-                    <th style={{...thTabla,minWidth:135}}>F. inicio</th>
-                    <th style={{...thTabla,minWidth:135}}>Vencimiento</th>
-                    <th style={{...thTabla,minWidth:170}}>Archivo / documento</th>
-                    {!editProject && <th style={{...thTabla,minWidth:150}}>Plan de trabajo</th>}
+                    <th style={{...thTabla,minWidth:135}}>País</th>
+                    <th style={{...thTabla,minWidth:145}}>Categoría</th>
+                    <th style={{...thTabla,minWidth:105}}>Prioridad</th>
+                    <th style={{...thTabla,minWidth:105}}>Código</th>
+                    <th style={{...thTabla,minWidth:260}}>Nombre del proyecto *</th>
+                    <th style={{...thTabla,minWidth:260}}>Descripción</th>
+                    <th style={{...thTabla,minWidth:115}}>Ticket</th>
+                    <th style={{...thTabla,minWidth:175}}>Responsable</th>
+                    <th style={{...thTabla,minWidth:155}}>Área</th>
+                    <th style={{...thTabla,minWidth:165}}>Estado</th>
+                    <th style={{...thTabla,minWidth:110}}>Avance</th>
+                    <th style={{...thTabla,minWidth:145}}>F. solicitud</th>
+                    <th style={{...thTabla,minWidth:145}}>F. inicio</th>
+                    <th style={{...thTabla,minWidth:145}}>Vencimiento</th>
+                    <th style={{...thTabla,minWidth:190}}>Archivo / documento</th>
+                    {!editProject && <th style={{...thTabla,minWidth:160}}>Plan de trabajo</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -775,7 +775,7 @@ function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, respon
                     const tareasFila = draftTareas[d._key] || [];
                     const abierto = planAbiertoKey === d._key;
                     return (
-                      <tr key={d._key || d.id || i} style={{borderBottom:"1px solid "+y.border}}>
+                      <tr key={d._key || d.id || i} style={{borderBottom:"1px solid "+y.border, background: i % 2 === 1 ? y.grayBg : y.surface}}>
                         <td style={tdTabla}>
                           {!editProject && drafts.length > 1 ? (
                             <button onClick={() => removeDraft(i)} title="Quitar este proyecto" style={{background:"none",border:"none",color:y.text3,cursor:"pointer",fontSize:15,padding:0}}>×</button>
@@ -803,10 +803,10 @@ function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, respon
                           <input value={d.codigo} onChange={e => updateField(i,"codigo",e.target.value)} style={inputTabla} />
                         </td>
                         <td style={tdTabla}>
-                          <textarea value={d.nombre} onChange={e => updateField(i,"nombre",e.target.value)} placeholder="Ej: Automatización de conciliaciones..." rows={2} style={{...inputTabla,minWidth:210,fontWeight:600,resize:"vertical"}} />
+                          <textarea value={d.nombre} onChange={e => updateField(i,"nombre",e.target.value)} placeholder="Ej: Automatización de conciliaciones..." rows={2} style={{...inputTabla,minWidth:240,fontWeight:600,lineHeight:1.5,resize:"vertical"}} />
                         </td>
                         <td style={tdTabla}>
-                          <textarea value={d.observacion} onChange={e => updateField(i,"observacion",e.target.value)} placeholder="Qué se va a hacer, notas..." rows={2} style={{...inputTabla,minWidth:210,resize:"vertical"}} />
+                          <textarea value={d.observacion} onChange={e => updateField(i,"observacion",e.target.value)} placeholder="Qué se va a hacer, notas..." rows={2} style={{...inputTabla,minWidth:240,lineHeight:1.5,resize:"vertical"}} />
                         </td>
                         <td style={tdTabla}>
                           <input value={d.ticket} onChange={e => updateField(i,"ticket",e.target.value)} style={inputTabla} />
@@ -837,7 +837,7 @@ function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, respon
                         </td>
                         <td style={tdTabla}>
                           <div style={{display:"flex",alignItems:"center",gap:4}}>
-                            <input type="number" min={0} max={100} value={Math.round((d.avance||0)*100)} onChange={e => updateField(i,"avance",(parseInt(e.target.value)||0)/100)} style={{...inputTabla,width:54,minWidth:54}} />
+                            <input type="number" min={0} max={100} value={Math.round((d.avance||0)*100)} onChange={e => updateField(i,"avance",(parseInt(e.target.value)||0)/100)} style={{...inputTabla,width:66,minWidth:66}} />
                             <span style={{fontSize:11,color:y.text3}}>%</span>
                           </div>
                         </td>
