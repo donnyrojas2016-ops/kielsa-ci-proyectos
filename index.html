@@ -25,7 +25,7 @@ button{font-family:inherit}
 <div id="root"></div>
 
 <script type="text/babel" data-presets="react">
-const { useState, useEffect, useMemo } = React;
+const { useState, useEffect, useMemo, useRef } = React;
 
 /* ---------- Supabase ---------- */
 const SUPABASE_URL = "https://jvithjvoyvxeljlectli.supabase.co";
@@ -114,6 +114,156 @@ function duracionDias(inicio, entrega) {
   const b = new Date(entrega + "T00:00:00");
   if (isNaN(a.getTime()) || isNaN(b.getTime())) return null;
   return Math.round((b - a) / 86400000);
+}
+
+/* ---------- Carga masiva de planes de trabajo desde Excel ---------- */
+// Convierte un valor de celda de Excel (número de serie, objeto Date o texto) a "YYYY-MM-DD".
+function normalizarFechaExcel(v) {
+  if (v === null || v === undefined || v === "") return null;
+  if (v instanceof Date) {
+    if (isNaN(v.getTime())) return null;
+    const yy = v.getFullYear(), mm = String(v.getMonth() + 1).padStart(2, "0"), dd = String(v.getDate()).padStart(2, "0");
+    return yy + "-" + mm + "-" + dd;
+  }
+  if (typeof v === "number") {
+    // Fecha serial de Excel: días desde 1899-12-30.
+    const ms = Date.UTC(1899, 11, 30) + v * 86400000;
+    const d = new Date(ms);
+    if (isNaN(d.getTime())) return null;
+    const yy = d.getUTCFullYear(), mm = String(d.getUTCMonth() + 1).padStart(2, "0"), dd = String(d.getUTCDate()).padStart(2, "0");
+    return yy + "-" + mm + "-" + dd;
+  }
+  const s = String(v).trim();
+  if (!s) return null;
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.substring(0, 10);
+  const m1 = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+  if (m1) return m1[3] + "-" + m1[2].padStart(2, "0") + "-" + m1[1].padStart(2, "0");
+  const parsed = new Date(s);
+  if (!isNaN(parsed.getTime())) {
+    const yy = parsed.getFullYear(), mm = String(parsed.getMonth() + 1).padStart(2, "0"), dd = String(parsed.getDate()).padStart(2, "0");
+    return yy + "-" + mm + "-" + dd;
+  }
+  return null;
+}
+
+// Lee un archivo .xlsx/.xls subido por el usuario y devuelve sus filas como objetos {columna: valor}.
+function leerArchivoExcel(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      try {
+        const data = new Uint8Array(e.target.result);
+        const wb = XLSX.read(data, { type: "array", cellDates: true });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        resolve(XLSX.utils.sheet_to_json(ws, { defval: "" }));
+      } catch (err) { reject(err); }
+    };
+    reader.onerror = () => reject(reader.error || new Error("No se pudo leer el archivo"));
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+// Normaliza el nombre de una columna para reconocerla sin importar mayúsculas, acentos o espacios.
+function normalizarClaveColumna(k) {
+  return String(k || "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "");
+}
+
+// Convierte las filas crudas del Excel en tareas listas para guardar.
+// Cada tarea conserva su EDT (número de fila) y, si aplica, el EDT del que depende,
+// para poder resolver esa dependencia una vez que las tareas ya tengan un id real o local.
+function parsearFilasExcelTareas(rows) {
+  const tareas = [];
+  rows.forEach((fila, idx) => {
+    const mapa = {};
+    Object.keys(fila).forEach(k => { mapa[normalizarClaveColumna(k)] = fila[k]; });
+    const titulo = String(mapa["tarea"] || mapa["titulo"] || mapa["nombretarea"] || mapa["nombre"] || "").trim();
+    if (!titulo) return; // fila vacía o sin nombre de tarea: se ignora
+
+    const responsable = String(mapa["responsable"] || "").trim();
+    const fechaInicio = normalizarFechaExcel(mapa["inicio"] || mapa["fechainicio"] || mapa["fechadeinicio"]);
+    const fechaEntrega = normalizarFechaExcel(mapa["entrega"] || mapa["fechaentrega"] || mapa["fechadeentrega"] || mapa["vencimiento"]);
+
+    let avance = parseInt(mapa["avance"] != null && mapa["avance"] !== "" ? mapa["avance"] : mapa["porcentajeavance"]);
+    if (isNaN(avance)) avance = 0;
+    avance = Math.max(0, Math.min(100, avance));
+
+    let estatus = String(mapa["estatus"] || mapa["estado"] || "").trim();
+    const estatusValido = TAREA_ESTADOS.find(e => e.toLowerCase() === estatus.toLowerCase());
+    estatus = estatusValido || (avance >= 100 ? "Completada" : (avance > 0 ? "En proceso" : "Pendiente"));
+
+    const dependeRaw = mapa["dependede"] || mapa["dependedeedt"] || mapa["dependeidedt"] || mapa["edtdelaquedepende"];
+    let dependeEdt = null;
+    if (dependeRaw !== undefined && dependeRaw !== null && String(dependeRaw).trim() !== "") {
+      const n = parseInt(String(dependeRaw).replace(/[^\d]/g, ""));
+      if (!isNaN(n)) dependeEdt = n;
+    }
+
+    const edtRaw = mapa["edt"];
+    const edt = edtRaw !== undefined && edtRaw !== "" && !isNaN(parseInt(edtRaw)) ? parseInt(edtRaw) : (idx + 1);
+
+    tareas.push({
+      _edt: edt,
+      _dependeEdt: dependeEdt,
+      titulo,
+      responsable: responsable || null,
+      fecha_inicio: fechaInicio,
+      fecha_entrega: fechaEntrega,
+      porcentaje_avance: avance,
+      estatus,
+      completada: estatus === "Completada"
+    });
+  });
+  return tareas;
+}
+
+// Genera y descarga una plantilla .xlsx con el formato esperado para la carga masiva.
+function descargarPlantillaExcel() {
+  const filas = [
+    ["EDT", "Tarea", "Responsable", "Inicio", "Entrega", "% Avance", "Estatus", "Depende de (EDT)"],
+    [1, "Ej: Levantamiento de requerimientos", "Ana Pérez", "2026-09-01", "2026-09-05", 0, "Pendiente", ""],
+    [2, "Ej: Desarrollo", "Carlos Gómez", "2026-09-06", "2026-09-20", 0, "Pendiente", 1]
+  ];
+  const ws = XLSX.utils.aoa_to_sheet(filas);
+  ws["!cols"] = [{ wch: 6 }, { wch: 42 }, { wch: 20 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 14 }, { wch: 18 }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Plan de trabajo");
+  XLSX.writeFile(wb, "Plantilla_plan_de_trabajo.xlsx");
+}
+
+// Botón reutilizable: abre el explorador de archivos, lee el Excel elegido y entrega
+// las tareas ya interpretadas a onImportar (que decide cómo guardarlas).
+function ImportarExcelButton({ onImportar, label, disabled }) {
+  const inputRef = useRef(null);
+  const [cargando, setCargando] = useState(false);
+
+  const manejarArchivo = async e => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = "";
+    if (!file) return;
+    setCargando(true);
+    try {
+      const rows = await leerArchivoExcel(file);
+      const tareas = parsearFilasExcelTareas(rows);
+      if (!tareas.length) {
+        alert("No se encontraron tareas en el archivo. Revisa que tenga una columna \"Tarea\" con datos.");
+        return;
+      }
+      await onImportar(tareas);
+    } catch (err) {
+      alert("No se pudo leer el archivo: " + (err.message || err));
+    } finally {
+      setCargando(false);
+    }
+  };
+
+  return (
+    <React.Fragment>
+      <input ref={inputRef} type="file" accept=".xlsx,.xls" style={{ display: "none" }} onChange={manejarArchivo} />
+      <Btn sm disabled={disabled || cargando} onClick={() => inputRef.current && inputRef.current.click()}>
+        <i className="ti ti-file-upload"/> {cargando ? "Importando..." : (label || "Importar Excel")}
+      </Btn>
+    </React.Fragment>
+  );
 }
 
 // Si el proyecto tiene tareas (Cronograma), el avance se calcula solo: promedio del % de avance de cada tarea.
@@ -395,6 +545,33 @@ function PlanAccionPanel({ proyecto, tareasProyecto, responsables, responsablesD
     }
   };
 
+  const importarTareasExcel = async (tareasParsed) => {
+    setCargando(true);
+    try {
+      const filas = tareasParsed.map(t => {
+        const { _edt, _dependeEdt, ...resto } = t;
+        return { proyectoId: proyecto.id, ...resto };
+      });
+      const { data: insertadas, error } = await supabase.from("proyecto_tareas").insert(filas).select();
+      if (error) throw error;
+      // Resolver las dependencias EDT -> id real, entre tareas del mismo archivo importado.
+      const edtAIndice = {};
+      tareasParsed.forEach((t, i) => { edtAIndice[t._edt] = i; });
+      for (let i = 0; i < tareasParsed.length; i++) {
+        const dEdt = tareasParsed[i]._dependeEdt;
+        const j = dEdt != null ? edtAIndice[dEdt] : undefined;
+        if (j !== undefined && insertadas[j] && insertadas[i]) {
+          await supabase.from("proyecto_tareas").update({ depende_id: insertadas[j].id }).eq("id", insertadas[i].id);
+        }
+      }
+      await onTareasChanged();
+    } catch (e) {
+      alert("No se pudo importar el plan de trabajo: " + (e.message || e) + (/column/i.test(e.message||"") ? "\n\n(Puede que falte correr el SQL del Cronograma en Supabase — ver README.)" : ""));
+    } finally {
+      setCargando(false);
+    }
+  };
+
   const nombreArchivoBase = (proyecto.codigo || proyecto.nombre || "proyecto").toString().replace(/[^\w\-]+/g,"_").substring(0,40);
 
   const exportarPlanExcel = () => {
@@ -447,7 +624,11 @@ function PlanAccionPanel({ proyecto, tareasProyecto, responsables, responsablesD
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,gap:8,flexWrap:"wrap"}}>
           <span style={{fontSize:12.5,fontWeight:700,color:y.text}}>{tareasProyecto.length} {tareasProyecto.length===1?"tarea":"tareas"}</span>
           {puedeEditar && !tareaForm && (
-            <Btn sm primary onClick={() => setTareaForm({mode:"add"})}><i className="ti ti-plus"/> Agregar tarea</Btn>
+            <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+              <Btn sm onClick={descargarPlantillaExcel}><i className="ti ti-download"/> Plantilla</Btn>
+              <ImportarExcelButton label="Carga masiva" onImportar={importarTareasExcel} />
+              <Btn sm primary onClick={() => setTareaForm({mode:"add"})}><i className="ti ti-plus"/> Agregar tarea</Btn>
+            </div>
           )}
         </div>
 
@@ -559,6 +740,27 @@ function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, respon
   };
   const eliminarTareaDraft = (key, tarea) => {
     setDraftTareas(map => ({ ...map, [key]: (map[key] || []).filter(t => t.id !== tarea.id) }));
+  };
+  const importarTareasDraft = (key, tareasParsed) => {
+    const nuevas = tareasParsed.map((t, i) => ({
+      id: "local_" + Date.now() + "_" + Math.random() + "_" + i,
+      titulo: t.titulo,
+      responsable: t.responsable,
+      fecha_inicio: t.fecha_inicio,
+      fecha_entrega: t.fecha_entrega,
+      porcentaje_avance: t.porcentaje_avance,
+      estatus: t.estatus,
+      completada: t.completada,
+      depende_id: null
+    }));
+    // Resolver dependencias EDT -> id local, entre tareas del mismo archivo importado.
+    const edtAIndice = {};
+    tareasParsed.forEach((t, i) => { edtAIndice[t._edt] = i; });
+    tareasParsed.forEach((t, i) => {
+      const j = t._dependeEdt != null ? edtAIndice[t._dependeEdt] : undefined;
+      if (j !== undefined && nuevas[j]) nuevas[i].depende_id = nuevas[j].id;
+    });
+    setDraftTareas(map => ({ ...map, [key]: [...(map[key] || []), ...nuevas] }));
   };
 
   // ---- Comentarios / bitácora del proyecto (solo aplica en modo edición) ----
@@ -910,7 +1112,11 @@ function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, respon
                             />
                           )}
                           {!(tareaFormDraft && tareaFormDraft.key === d._key) && (
-                            <Btn sm onClick={() => setTareaFormDraft({mode:"add", key:d._key})}><i className="ti ti-plus"/> Agregar tarea al plan</Btn>
+                            <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                              <Btn sm onClick={() => setTareaFormDraft({mode:"add", key:d._key})}><i className="ti ti-plus"/> Agregar tarea al plan</Btn>
+                              <Btn sm onClick={descargarPlantillaExcel}><i className="ti ti-download"/> Plantilla</Btn>
+                              <ImportarExcelButton label="Carga masiva" onImportar={tareas => importarTareasDraft(d._key, tareas)} />
+                            </div>
                           )}
 
                           {(draftTareas[d._key] || []).length > 0 && (
