@@ -146,7 +146,8 @@ function normalizarFechaExcel(v) {
   return null;
 }
 
-// Lee un archivo .xlsx/.xls subido por el usuario y devuelve sus filas como objetos {columna: valor}.
+// Lee un archivo .xlsx/.xls subido por el usuario y devuelve su primera hoja
+// como una matriz de filas crudas (arreglo de arreglos), sin asumir dónde está el encabezado.
 function leerArchivoExcel(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -155,7 +156,7 @@ function leerArchivoExcel(file) {
         const data = new Uint8Array(e.target.result);
         const wb = XLSX.read(data, { type: "array", cellDates: true });
         const ws = wb.Sheets[wb.SheetNames[0]];
-        resolve(XLSX.utils.sheet_to_json(ws, { defval: "" }));
+        resolve(XLSX.utils.sheet_to_json(ws, { header: 1, defval: "", raw: true, blankrows: true }));
       } catch (err) { reject(err); }
     };
     reader.onerror = () => reject(reader.error || new Error("No se pudo leer el archivo"));
@@ -168,38 +169,60 @@ function normalizarClaveColumna(k) {
   return String(k || "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "");
 }
 
-// Convierte las filas crudas del Excel en tareas listas para guardar.
-// Cada tarea conserva su EDT (número de fila) y, si aplica, el EDT del que depende,
-// para poder resolver esa dependencia una vez que las tareas ya tengan un id real o local.
-function parsearFilasExcelTareas(rows) {
+// Convierte las filas crudas del Excel (matriz de filas, tal como se leen del archivo) en tareas listas para guardar.
+// No asume que el encabezado está en la primera fila: lo busca (la primera fila que tenga una
+// columna reconocible como "Tarea"), para que también funcione con archivos que traen filas de
+// título arriba de la tabla real — como el que exporta el propio botón "Excel" del Plan de acción
+// ("Proyecto", "Código" y una fila en blanco antes del encabezado real).
+// Cada tarea conserva su EDT (de la columna EDT, o su posición si no hay) y, si aplica,
+// el EDT del que depende, para poder resolver esa dependencia una vez que las tareas ya tengan un id real o local.
+function parsearFilasExcelTareas(filasCrudas) {
+  let columnas = null;
+  let indiceEncabezado = -1;
+  for (let i = 0; i < filasCrudas.length; i++) {
+    const fila = filasCrudas[i] || [];
+    const mapaFila = {};
+    fila.forEach((celda, col) => { mapaFila[normalizarClaveColumna(celda)] = col; });
+    if (mapaFila["tarea"] !== undefined || mapaFila["titulo"] !== undefined || mapaFila["nombretarea"] !== undefined || mapaFila["nombre"] !== undefined) {
+      columnas = mapaFila;
+      indiceEncabezado = i;
+      break;
+    }
+  }
+  if (!columnas) return [];
+
+  const valor = (fila, clave) => { const c = columnas[clave]; return c !== undefined ? fila[c] : undefined; };
+
   const tareas = [];
-  rows.forEach((fila, idx) => {
-    const mapa = {};
-    Object.keys(fila).forEach(k => { mapa[normalizarClaveColumna(k)] = fila[k]; });
-    const titulo = String(mapa["tarea"] || mapa["titulo"] || mapa["nombretarea"] || mapa["nombre"] || "").trim();
-    if (!titulo) return; // fila vacía o sin nombre de tarea: se ignora
+  for (let i = indiceEncabezado + 1; i < filasCrudas.length; i++) {
+    const fila = filasCrudas[i];
+    if (!fila || !fila.length) continue;
 
-    const responsable = String(mapa["responsable"] || "").trim();
-    const fechaInicio = normalizarFechaExcel(mapa["inicio"] || mapa["fechainicio"] || mapa["fechadeinicio"]);
-    const fechaEntrega = normalizarFechaExcel(mapa["entrega"] || mapa["fechaentrega"] || mapa["fechadeentrega"] || mapa["vencimiento"]);
+    const titulo = String(valor(fila,"tarea") || valor(fila,"titulo") || valor(fila,"nombretarea") || valor(fila,"nombre") || "").trim();
+    if (!titulo) continue; // fila vacía o sin nombre de tarea: se ignora
 
-    let avance = parseInt(mapa["avance"] != null && mapa["avance"] !== "" ? mapa["avance"] : mapa["porcentajeavance"]);
+    const responsable = String(valor(fila,"responsable") || "").trim();
+    const fechaInicio = normalizarFechaExcel(valor(fila,"inicio") || valor(fila,"fechainicio") || valor(fila,"fechadeinicio"));
+    const fechaEntrega = normalizarFechaExcel(valor(fila,"entrega") || valor(fila,"fechaentrega") || valor(fila,"fechadeentrega") || valor(fila,"vencimiento"));
+
+    const avanceRaw = valor(fila,"avance") !== undefined && valor(fila,"avance") !== "" ? valor(fila,"avance") : valor(fila,"porcentajeavance");
+    let avance = parseInt(avanceRaw);
     if (isNaN(avance)) avance = 0;
     avance = Math.max(0, Math.min(100, avance));
 
-    let estatus = String(mapa["estatus"] || mapa["estado"] || "").trim();
+    let estatus = String(valor(fila,"estatus") || valor(fila,"estado") || "").trim();
     const estatusValido = TAREA_ESTADOS.find(e => e.toLowerCase() === estatus.toLowerCase());
     estatus = estatusValido || (avance >= 100 ? "Completada" : (avance > 0 ? "En proceso" : "Pendiente"));
 
-    const dependeRaw = mapa["dependede"] || mapa["dependedeedt"] || mapa["dependeidedt"] || mapa["edtdelaquedepende"];
+    const dependeRaw = valor(fila,"dependede") || valor(fila,"dependedeedt") || valor(fila,"dependeidedt") || valor(fila,"edtdelaquedepende");
     let dependeEdt = null;
     if (dependeRaw !== undefined && dependeRaw !== null && String(dependeRaw).trim() !== "") {
       const n = parseInt(String(dependeRaw).replace(/[^\d]/g, ""));
       if (!isNaN(n)) dependeEdt = n;
     }
 
-    const edtRaw = mapa["edt"];
-    const edt = edtRaw !== undefined && edtRaw !== "" && !isNaN(parseInt(edtRaw)) ? parseInt(edtRaw) : (idx + 1);
+    const edtRaw = valor(fila,"edt");
+    const edt = edtRaw !== undefined && edtRaw !== "" && !isNaN(parseInt(edtRaw)) ? parseInt(edtRaw) : (i - indiceEncabezado);
 
     tareas.push({
       _edt: edt,
@@ -212,7 +235,7 @@ function parsearFilasExcelTareas(rows) {
       estatus,
       completada: estatus === "Completada"
     });
-  });
+  }
   return tareas;
 }
 
