@@ -701,9 +701,10 @@ function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, respon
 
   const conNombre = drafts.filter(d => d.nombre.trim()).length;
 
-  const thTabla = { textAlign:"left", fontSize:10.5, fontWeight:800, color:y.text3, textTransform:"uppercase", letterSpacing:.3, padding:"0.75rem 0.9rem", borderBottom:"2px solid "+y.border2, whiteSpace:"nowrap", background:y.grayBg };
-  const tdTabla = { padding:"0.85rem 0.9rem", verticalAlign:"middle" };
-  const inputTabla = { width:"100%", minWidth:96, padding:"0.5rem 0.65rem", fontSize:12.5, border:"1px solid "+y.border2, borderRadius:7, background:y.surface, color:y.text, outline:"none", fontFamily:"inherit", boxSizing:"border-box", lineHeight:1.4 };
+  // Estilos de la lista "Campo / Valor": una fila por dato, etiqueta a la izquierda y su campo editable a la derecha.
+  const fvCampoStyle = { padding:"0.75rem 1rem", fontSize:11, fontWeight:800, color:y.text3, textTransform:"uppercase", letterSpacing:.3, whiteSpace:"nowrap", width:190, verticalAlign:"middle" };
+  const fvValorStyle = { padding:"0.55rem 1rem", verticalAlign:"middle" };
+  const inputTabla = { width:"100%", padding:"0.5rem 0.7rem", fontSize:13, border:"1px solid "+y.border2, borderRadius:8, background:y.surface, color:y.text, outline:"none", fontFamily:"inherit", boxSizing:"border-box", lineHeight:1.4 };
 
   return (
     <div style={{position:"fixed",inset:0,background:"rgba(15,23,42,.6)",zIndex:500,display:"flex",flexDirection:"column"}} onClick={e => e.target === e.currentTarget && onClose()}>
@@ -747,71 +748,74 @@ function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, respon
         {(!editProject || tab === "datos") && (
           <React.Fragment>
             <SectionTitle first>{editProject ? "Datos del proyecto" : "Datos de los proyectos"}</SectionTitle>
-            <div style={{overflowX:"auto",border:"1px solid "+y.border,borderRadius:12,boxShadow:"0 1px 3px rgba(0,0,0,.05)"}}>
-              <table style={{borderCollapse:"collapse",fontSize:12.5}}>
-                <thead>
-                  <tr>
-                    <th style={thTabla}>#</th>
-                    <th style={{...thTabla,minWidth:135}}>País</th>
-                    <th style={{...thTabla,minWidth:145}}>Categoría</th>
-                    <th style={{...thTabla,minWidth:105}}>Prioridad</th>
-                    <th style={{...thTabla,minWidth:105}}>Código</th>
-                    <th style={{...thTabla,minWidth:260}}>Nombre del proyecto *</th>
-                    <th style={{...thTabla,minWidth:260}}>Descripción</th>
-                    <th style={{...thTabla,minWidth:115}}>Ticket</th>
-                    <th style={{...thTabla,minWidth:175}}>Responsable</th>
-                    <th style={{...thTabla,minWidth:155}}>Área</th>
-                    <th style={{...thTabla,minWidth:165}}>Estado</th>
-                    <th style={{...thTabla,minWidth:110}}>Avance</th>
-                    <th style={{...thTabla,minWidth:145}}>F. solicitud</th>
-                    <th style={{...thTabla,minWidth:145}}>F. inicio</th>
-                    <th style={{...thTabla,minWidth:145}}>Vencimiento</th>
-                    <th style={{...thTabla,minWidth:190}}>Archivo / documento</th>
-                    {!editProject && <th style={{...thTabla,minWidth:160}}>Plan de trabajo</th>}
-                  </tr>
-                </thead>
-                <tbody>
-                  {drafts.map((d, i) => {
-                    const tareasFila = draftTareas[d._key] || [];
-                    const abierto = planAbiertoKey === d._key;
-                    return (
-                      <tr key={d._key || d.id || i} style={{borderBottom:"1px solid "+y.border, background: i % 2 === 1 ? y.grayBg : y.surface}}>
-                        <td style={tdTabla}>
-                          {!editProject && drafts.length > 1 ? (
-                            <button onClick={() => removeDraft(i)} title="Quitar este proyecto" style={{background:"none",border:"none",color:y.text3,cursor:"pointer",fontSize:15,padding:0}}>×</button>
-                          ) : (i + 1)}
-                        </td>
-                        <td style={tdTabla}>
+
+            {drafts.map((d, i) => {
+              const tareasFila = draftTareas[d._key] || [];
+              const abierto = planAbiertoKey === d._key;
+              return (
+                <div key={d._key || d.id || i} style={{border:"1px solid "+y.border,borderRadius:12,boxShadow:"0 1px 3px rgba(0,0,0,.05)",marginBottom: i === drafts.length - 1 ? 0 : 16,overflow:"hidden"}}>
+                  {!editProject && drafts.length > 1 && (
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0.6rem 1rem",background:y.grayBg,borderBottom:"1px solid "+y.border}}>
+                      <span style={{fontSize:12,fontWeight:800,color:y.primary}}>{d.nombre.trim() || "Proyecto " + (i + 1)}</span>
+                      <button onClick={() => removeDraft(i)} title="Quitar este proyecto" style={{background:"none",border:"none",color:y.text3,cursor:"pointer",fontSize:12,fontWeight:700,display:"flex",alignItems:"center",gap:4}}><i className="ti ti-trash" style={{fontSize:13}}/> Quitar</button>
+                    </div>
+                  )}
+                  <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+                    <tbody>
+                      <tr style={{borderBottom:"1px solid "+y.border}}>
+                        <td style={fvCampoStyle}>País</td>
+                        <td style={fvValorStyle}>
                           <select value={d.pais_id} onChange={e => updateField(i,"pais_id",e.target.value)} style={inputTabla}>
                             <option value="">—</option>
                             {paises.map(p => <option key={p.id} value={p.id}>{bandera(p.nombre)} {p.nombre}</option>)}
                           </select>
                         </td>
-                        <td style={tdTabla}>
+                      </tr>
+                      <tr style={{borderBottom:"1px solid "+y.border,background:y.grayBg}}>
+                        <td style={fvCampoStyle}>Categoría</td>
+                        <td style={fvValorStyle}>
                           <select value={d.categoria} onChange={e => updateField(i,"categoria",e.target.value)} style={inputTabla}>
                             {CATEGORIAS.map(c => <option key={c}>{c}</option>)}
                           </select>
                         </td>
-                        <td style={tdTabla}>
+                      </tr>
+                      <tr style={{borderBottom:"1px solid "+y.border}}>
+                        <td style={fvCampoStyle}>Prioridad</td>
+                        <td style={fvValorStyle}>
                           <select value={d.prioridad} onChange={e => updateField(i,"prioridad",e.target.value)} style={inputTabla}>
                             <option value={1}>Alta</option>
                             <option value={2}>Media</option>
                             <option value={3}>Normal</option>
                           </select>
                         </td>
-                        <td style={tdTabla}>
+                      </tr>
+                      <tr style={{borderBottom:"1px solid "+y.border,background:y.grayBg}}>
+                        <td style={fvCampoStyle}>Código</td>
+                        <td style={fvValorStyle}>
                           <input value={d.codigo} onChange={e => updateField(i,"codigo",e.target.value)} style={inputTabla} />
                         </td>
-                        <td style={tdTabla}>
-                          <textarea value={d.nombre} onChange={e => updateField(i,"nombre",e.target.value)} placeholder="Ej: Automatización de conciliaciones..." rows={2} style={{...inputTabla,minWidth:240,fontWeight:600,lineHeight:1.5,resize:"vertical"}} />
+                      </tr>
+                      <tr style={{borderBottom:"1px solid "+y.border}}>
+                        <td style={fvCampoStyle}>Nombre del proyecto *</td>
+                        <td style={fvValorStyle}>
+                          <input value={d.nombre} onChange={e => updateField(i,"nombre",e.target.value)} placeholder="Ej: Automatización de conciliaciones..." style={{...inputTabla,fontWeight:600}} />
                         </td>
-                        <td style={tdTabla}>
-                          <textarea value={d.observacion} onChange={e => updateField(i,"observacion",e.target.value)} placeholder="Qué se va a hacer, notas..." rows={2} style={{...inputTabla,minWidth:240,lineHeight:1.5,resize:"vertical"}} />
+                      </tr>
+                      <tr style={{borderBottom:"1px solid "+y.border,background:y.grayBg}}>
+                        <td style={fvCampoStyle}>Descripción</td>
+                        <td style={fvValorStyle}>
+                          <textarea value={d.observacion} onChange={e => updateField(i,"observacion",e.target.value)} placeholder="Qué se va a hacer, notas..." rows={2} style={{...inputTabla,lineHeight:1.5,resize:"vertical"}} />
                         </td>
-                        <td style={tdTabla}>
+                      </tr>
+                      <tr style={{borderBottom:"1px solid "+y.border}}>
+                        <td style={fvCampoStyle}>Ticket</td>
+                        <td style={fvValorStyle}>
                           <input value={d.ticket} onChange={e => updateField(i,"ticket",e.target.value)} style={inputTabla} />
                         </td>
-                        <td style={tdTabla}>
+                      </tr>
+                      <tr style={{borderBottom:"1px solid "+y.border,background:y.grayBg}}>
+                        <td style={fvCampoStyle}>Responsable</td>
+                        <td style={fvValorStyle}>
                           {responsablesDisponibles && responsables && responsables.length > 0 ? (
                             <select value={d.responsable || ""} onChange={e => updateField(i,"responsable",e.target.value)} style={inputTabla}>
                               <option value="">—</option>
@@ -824,120 +828,139 @@ function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, respon
                             <input value={d.responsable} onChange={e => updateField(i,"responsable",e.target.value)} style={inputTabla} />
                           )}
                         </td>
-                        <td style={tdTabla}>
+                      </tr>
+                      <tr style={{borderBottom:"1px solid "+y.border}}>
+                        <td style={fvCampoStyle}>Área</td>
+                        <td style={fvValorStyle}>
                           <select value={d.area} onChange={e => updateField(i,"area",e.target.value)} style={inputTabla}>
                             <option value="">—</option>
                             {(areasDisponibles && areasCatalogo && areasCatalogo.length > 0 ? areasCatalogo.map(a => a.nombre) : AREAS).map(a => <option key={a}>{a}</option>)}
                           </select>
                         </td>
-                        <td style={tdTabla}>
+                      </tr>
+                      <tr style={{borderBottom:"1px solid "+y.border,background:y.grayBg}}>
+                        <td style={fvCampoStyle}>Estado</td>
+                        <td style={fvValorStyle}>
                           <select value={d.estado} onChange={e => updateField(i,"estado",e.target.value)} style={inputTabla}>
                             {ESTADOS.map(s => <option key={s}>{s}</option>)}
                           </select>
                         </td>
-                        <td style={tdTabla}>
-                          <div style={{display:"flex",alignItems:"center",gap:4}}>
-                            <input type="number" min={0} max={100} value={Math.round((d.avance||0)*100)} onChange={e => updateField(i,"avance",(parseInt(e.target.value)||0)/100)} style={{...inputTabla,width:66,minWidth:66}} />
-                            <span style={{fontSize:11,color:y.text3}}>%</span>
+                      </tr>
+                      <tr style={{borderBottom:"1px solid "+y.border}}>
+                        <td style={fvCampoStyle}>Avance{editProject ? " (calculado)" : ""}</td>
+                        <td style={fvValorStyle}>
+                          <div style={{display:"flex",alignItems:"center",gap:8}}>
+                            <input type="range" min={0} max={100} value={Math.round((d.avance||0)*100) <= 100 ? Math.round((d.avance||0)*100) : d.avance||0} onChange={e => updateField(i,"avance",parseInt(e.target.value)/100)} style={{maxWidth:260}} />
+                            <span style={{fontSize:12.5,fontWeight:700,color:y.primary,minWidth:34}}>{Math.round((d.avance||0)*100)}%</span>
                           </div>
                         </td>
-                        <td style={tdTabla}>
-                          <input type="date" value={d.fecha_solicitud||""} onChange={e => updateField(i,"fecha_solicitud",e.target.value)} style={inputTabla} />
-                        </td>
-                        <td style={tdTabla}>
-                          <input type="date" value={d.fecha_inicio} onChange={e => updateField(i,"fecha_inicio",e.target.value)} style={inputTabla} />
-                        </td>
-                        <td style={tdTabla}>
-                          <input type="date" value={d.fecha_fin} onChange={e => updateField(i,"fecha_fin",e.target.value)} style={inputTabla} />
-                        </td>
-                        <td style={tdTabla}>
-                          <input value={d.archivo_nombre||""} onChange={e => updateField(i,"archivo_nombre",e.target.value)} placeholder="Nombre o enlace" style={inputTabla} />
-                        </td>
-                        {!editProject && (
-                          <td style={tdTabla}>
-                            <Btn sm onClick={() => setPlanAbiertoKey(k => k === d._key ? null : d._key)}>
-                              <i className="ti ti-list-check"/> {tareasFila.length} tarea{tareasFila.length === 1 ? "" : "s"}
-                              <i className={"ti " + (abierto ? "ti-chevron-up" : "ti-chevron-down")} style={{marginLeft:2}}/>
-                            </Btn>
-                          </td>
-                        )}
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                      <tr style={{borderBottom:"1px solid "+y.border,background:y.grayBg}}>
+                        <td style={fvCampoStyle}>Fecha de solicitud</td>
+                        <td style={fvValorStyle}>
+                          <input type="date" value={d.fecha_solicitud||""} onChange={e => updateField(i,"fecha_solicitud",e.target.value)} style={{...inputTabla,maxWidth:220}} />
+                        </td>
+                      </tr>
+                      <tr style={{borderBottom:"1px solid "+y.border}}>
+                        <td style={fvCampoStyle}>Fecha de inicio</td>
+                        <td style={fvValorStyle}>
+                          <input type="date" value={d.fecha_inicio} onChange={e => updateField(i,"fecha_inicio",e.target.value)} style={{...inputTabla,maxWidth:220}} />
+                        </td>
+                      </tr>
+                      <tr style={{borderBottom:"1px solid "+y.border,background:y.grayBg}}>
+                        <td style={fvCampoStyle}>Vencimiento</td>
+                        <td style={fvValorStyle}>
+                          <input type="date" value={d.fecha_fin} onChange={e => updateField(i,"fecha_fin",e.target.value)} style={{...inputTabla,maxWidth:220}} />
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style={fvCampoStyle}>Archivo / documento</td>
+                        <td style={fvValorStyle}>
+                          <input value={d.archivo_nombre||""} onChange={e => updateField(i,"archivo_nombre",e.target.value)} placeholder="Nombre o enlace del archivo" style={inputTabla} />
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
 
-            {editProject && (
-              <div style={{fontSize:11,color:y.text3,marginTop:8}}>Si el proyecto tiene Plan de acción (abajo), el Avance se calcula solo a partir de las tareas.</div>
-            )}
+                  {editProject && (
+                    <div style={{fontSize:11,color:y.text3,padding:"0.7rem 1rem",borderTop:"1px solid "+y.border,background:y.grayBg}}>Si el proyecto tiene Plan de acción (abajo), el Avance se calcula solo a partir de las tareas.</div>
+                  )}
+
+                  {!editProject && (
+                    <div style={{borderTop:"1px solid "+y.border,padding:"0.75rem 1rem",background:y.grayBg}}>
+                      <Btn sm onClick={() => setPlanAbiertoKey(k => k === d._key ? null : d._key)}>
+                        <i className="ti ti-list-check"/> Plan de trabajo — {tareasFila.length} tarea{tareasFila.length === 1 ? "" : "s"}
+                        <i className={"ti " + (abierto ? "ti-chevron-up" : "ti-chevron-down")} style={{marginLeft:2}}/>
+                      </Btn>
+
+                      {abierto && (
+                        <div style={{marginTop:12}}>
+                          <div style={{fontSize:11.5,color:y.text3,marginBottom:10}}>
+                            Se guarda junto con este proyecto al hacer clic en "Guardar". También puedes dejarlo vacío por ahora y agregar las tareas después, editando el proyecto.
+                          </div>
+
+                          {tareaFormDraft && tareaFormDraft.key === d._key && (
+                            <TareaForm
+                              tarea={tareaFormDraft.mode === "edit" ? tareaFormDraft.tarea : null}
+                              tareasProyecto={draftTareas[d._key] || []}
+                              responsables={responsables}
+                              responsablesDisponibles={responsablesDisponibles}
+                              onGuardar={guardarTareaDraft}
+                              onCancelar={() => setTareaFormDraft(null)}
+                            />
+                          )}
+                          {!(tareaFormDraft && tareaFormDraft.key === d._key) && (
+                            <Btn sm onClick={() => setTareaFormDraft({mode:"add", key:d._key})}><i className="ti ti-plus"/> Agregar tarea al plan</Btn>
+                          )}
+
+                          {(draftTareas[d._key] || []).length > 0 && (
+                            <div style={{marginTop:12,overflowX:"auto"}}>
+                              <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+                                <thead>
+                                  <tr>
+                                    {["Tarea","Responsable","Inicio","Entrega","% Avance","Estatus",""].map(h => (
+                                      <th key={h} style={{textAlign:"left",fontSize:10,fontWeight:800,color:y.text3,textTransform:"uppercase",letterSpacing:.3,padding:"0.5rem 0.5rem",borderBottom:"1px solid "+y.border,whiteSpace:"nowrap",background:y.surface}}>{h}</th>
+                                    ))}
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {(draftTareas[d._key] || []).map(t => {
+                                    const est = estatusEfectivoTarea(t);
+                                    const [estBg, estColor] = TAREA_ESTADO_COLOR[est] || [y.grayBg, y.gray];
+                                    return (
+                                      <tr key={t.id} style={{borderBottom:"1px solid "+y.border}}>
+                                        <td style={{padding:"0.5rem",color:y.text,maxWidth:220,background:y.surface}}>{t.titulo}</td>
+                                        <td style={{padding:"0.5rem",color:y.text2,whiteSpace:"nowrap",background:y.surface}}>{t.responsable || "—"}</td>
+                                        <td style={{padding:"0.5rem",color:y.text2,whiteSpace:"nowrap",background:y.surface}}>{t.fecha_inicio || "—"}</td>
+                                        <td style={{padding:"0.5rem",color:y.text2,whiteSpace:"nowrap",background:y.surface}}>{t.fecha_entrega || "—"}</td>
+                                        <td style={{padding:"0.5rem",background:y.surface}}>{avanceTarea(t)}%</td>
+                                        <td style={{padding:"0.5rem",background:y.surface}}>
+                                          <span style={{display:"inline-flex",padding:"3px 9px",borderRadius:20,fontSize:10.5,fontWeight:700,background:estBg,color:estColor,whiteSpace:"nowrap"}}>{est}</span>
+                                        </td>
+                                        <td style={{padding:"0.5rem",textAlign:"right",whiteSpace:"nowrap",background:y.surface}}>
+                                          <button onClick={() => setTareaFormDraft({mode:"edit", key:d._key, tarea:t})} style={{background:"none",border:"none",color:y.text3,cursor:"pointer",padding:3}} title="Editar"><i className="ti ti-pencil" style={{fontSize:13}}/></button>
+                                          <button onClick={() => eliminarTareaDraft(d._key, t)} style={{background:"none",border:"none",color:y.text3,cursor:"pointer",padding:3}} title="Eliminar"><i className="ti ti-trash" style={{fontSize:13}}/></button>
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
 
             {!editProject && (
-              <div style={{marginTop:10}}>
-                <Btn sm onClick={addDraft}><i className="ti ti-plus"/> Agregar otro proyecto</Btn>
+              <div style={{marginTop:14}}>
+                <Btn onClick={addDraft}><i className="ti ti-plus"/> Agregar otro proyecto</Btn>
               </div>
             )}
-
-            {!editProject && drafts.map((d, i) => planAbiertoKey === d._key && (
-              <div key={d._key} style={{marginTop:14,border:"1px solid "+y.border,borderRadius:10,padding:"0.9rem 1rem",background:y.grayBg}}>
-                <div style={{fontSize:12,fontWeight:700,color:y.text,marginBottom:4}}>
-                  Plan de trabajo (opcional) — {d.nombre.trim() || "Proyecto " + (i + 1)}
-                </div>
-                <div style={{fontSize:11.5,color:y.text3,marginBottom:10}}>
-                  Se guarda junto con este proyecto al hacer clic en "Guardar". También puedes dejarlo vacío por ahora y agregar las tareas después, editando el proyecto.
-                </div>
-
-                {tareaFormDraft && tareaFormDraft.key === d._key && (
-                  <TareaForm
-                    tarea={tareaFormDraft.mode === "edit" ? tareaFormDraft.tarea : null}
-                    tareasProyecto={draftTareas[d._key] || []}
-                    responsables={responsables}
-                    responsablesDisponibles={responsablesDisponibles}
-                    onGuardar={guardarTareaDraft}
-                    onCancelar={() => setTareaFormDraft(null)}
-                  />
-                )}
-                {!(tareaFormDraft && tareaFormDraft.key === d._key) && (
-                  <Btn sm onClick={() => setTareaFormDraft({mode:"add", key:d._key})}><i className="ti ti-plus"/> Agregar tarea al plan</Btn>
-                )}
-
-                {(draftTareas[d._key] || []).length > 0 && (
-                  <div style={{marginTop:12,overflowX:"auto"}}>
-                    <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
-                      <thead>
-                        <tr>
-                          {["Tarea","Responsable","Inicio","Entrega","% Avance","Estatus",""].map(h => (
-                            <th key={h} style={{textAlign:"left",fontSize:10,fontWeight:800,color:y.text3,textTransform:"uppercase",letterSpacing:.3,padding:"0.5rem 0.5rem",borderBottom:"1px solid "+y.border,whiteSpace:"nowrap",background:y.surface}}>{h}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {(draftTareas[d._key] || []).map(t => {
-                          const est = estatusEfectivoTarea(t);
-                          const [estBg, estColor] = TAREA_ESTADO_COLOR[est] || [y.grayBg, y.gray];
-                          return (
-                            <tr key={t.id} style={{borderBottom:"1px solid "+y.border}}>
-                              <td style={{padding:"0.5rem",color:y.text,maxWidth:220,background:y.surface}}>{t.titulo}</td>
-                              <td style={{padding:"0.5rem",color:y.text2,whiteSpace:"nowrap",background:y.surface}}>{t.responsable || "—"}</td>
-                              <td style={{padding:"0.5rem",color:y.text2,whiteSpace:"nowrap",background:y.surface}}>{t.fecha_inicio || "—"}</td>
-                              <td style={{padding:"0.5rem",color:y.text2,whiteSpace:"nowrap",background:y.surface}}>{t.fecha_entrega || "—"}</td>
-                              <td style={{padding:"0.5rem",background:y.surface}}>{avanceTarea(t)}%</td>
-                              <td style={{padding:"0.5rem",background:y.surface}}>
-                                <span style={{display:"inline-flex",padding:"3px 9px",borderRadius:20,fontSize:10.5,fontWeight:700,background:estBg,color:estColor,whiteSpace:"nowrap"}}>{est}</span>
-                              </td>
-                              <td style={{padding:"0.5rem",textAlign:"right",whiteSpace:"nowrap",background:y.surface}}>
-                                <button onClick={() => setTareaFormDraft({mode:"edit", key:d._key, tarea:t})} style={{background:"none",border:"none",color:y.text3,cursor:"pointer",padding:3}} title="Editar"><i className="ti ti-pencil" style={{fontSize:13}}/></button>
-                                <button onClick={() => eliminarTareaDraft(d._key, t)} style={{background:"none",border:"none",color:y.text3,cursor:"pointer",padding:3}} title="Eliminar"><i className="ti ti-trash" style={{fontSize:13}}/></button>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-            ))}
 
             {editProject && (
               <React.Fragment>
