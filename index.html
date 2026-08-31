@@ -1870,6 +1870,7 @@ function App() {
   const [toDelete, setToDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
   const [selectedId, setSelectedId] = useState(null); // id del proyecto seleccionado para ver su Plan de acción abajo de la tabla
+  const [renumerando, setRenumerando] = useState(false);
 
   const cargarDatos = async () => {
     setLoading(true);
@@ -2032,6 +2033,29 @@ function App() {
       alert("No se pudo eliminar: " + (e.message || e));
     } finally {
       setDeleting(false);
+    }
+  };
+
+  // Reasigna el "Código" de TODOS los proyectos como 1, 2, 3... según el orden actual de la tabla
+  // (por id de creación), para quitar los huecos que dejan los proyectos eliminados.
+  const renumerarCodigos = async () => {
+    if (!proyectos.length) return;
+    if (!window.confirm('Esto va a reemplazar el "Código" de los ' + proyectos.length + ' proyectos con un número correlativo (1, 2, 3...) según el orden actual de la tabla. Los códigos que tengas escritos a mano se van a perder. ¿Continuar?')) return;
+    setRenumerando(true);
+    try {
+      const ordenados = [...proyectos].sort((a, b) => a.id - b.id);
+      for (let i = 0; i < ordenados.length; i++) {
+        const nuevoCodigo = String(i + 1);
+        if (ordenados[i].codigo !== nuevoCodigo) {
+          const { error } = await supabase.from("proyectos").update({ codigo: nuevoCodigo }).eq("id", ordenados[i].id);
+          if (error) throw error;
+        }
+      }
+      await cargarDatos();
+    } catch (e) {
+      alert("No se pudo renumerar: " + (e.message || e));
+    } finally {
+      setRenumerando(false);
     }
   };
 
@@ -2248,6 +2272,11 @@ function App() {
                     </select>
                     <Btn sm onClick={exportarExcel}><i className="ti ti-file-spreadsheet"/> Excel</Btn>
                     <Btn sm onClick={exportarPDF}><i className="ti ti-file-type-pdf"/> PDF</Btn>
+                    {puedeEditar && (
+                      <Btn sm disabled={renumerando} onClick={renumerarCodigos} title="Vuelve a numerar el Código de todos los proyectos como 1, 2, 3... según el orden actual, sin huecos">
+                        <i className="ti ti-sort-ascending-numbers"/> {renumerando ? "Renumerando..." : "Renumerar"}
+                      </Btn>
+                    )}
                     {puedeEditar && <Btn primary sm onClick={() => setModal({mode:"add"})}><i className="ti ti-plus"/> Agregar proyecto</Btn>}
                   </React.Fragment>
                 }
