@@ -50,6 +50,7 @@ Si más adelante se quiere cerrar el hueco de verdad (no solo silenciar el aviso
 - Botón "Editar" con Datos del proyecto (misma lista de Campo / Valor, más el Plan de acción) y Comentarios — ver sección "Nuevo formulario de proyecto (lista de Campo / Valor)" más abajo.
 - Plan de acción por proyecto (debajo de la tabla, al seleccionarlo), con formato tipo Excel: tabla de actividades con días hábiles, responsable, fechas, % de avance, estado, observaciones, % planificado y desvío, más un resumen de avance y de actividades por estado, y exportar ese plan a Excel y a PDF — ver sección "Tabla de proyectos y Plan de acción".
 - Exportar a Excel y a PDF la lista completa de proyectos (botones junto a los filtros).
+- Evaluación Financiera Proyectos: sección nueva del menú lateral para asociar a cada proyecto que lo necesite una evaluación financiera con proyección a 3 años, ROI, VPN, TIR, Payback y veredicto, calculados en vivo — ver sección "Evaluación Financiera Proyectos".
 
 ## Activar los comentarios (una sola vez en Supabase)
 
@@ -98,6 +99,7 @@ Ahora la página tiene un menú a la izquierda con 6 secciones:
 - **Responsables** — catálogo de responsables. En el formulario de "Agregar/Editar proyecto", el campo Responsable ahora es una lista desplegable que se llena con este catálogo, en vez de tener que escribirlo a mano cada vez (solo Administradores gestionan el catálogo; cualquiera con permiso de editar proyectos puede elegir de la lista al crear/editar un proyecto).
 - **Reportes** — KPIs, resumen por categoría y alertas de vencimiento, en su propia pestaña separada de Proyectos (ver sección "Reportes (pestaña separada de Proyectos)" más abajo).
 - **Proyectos** — filtros, tabla de proyectos con su Plan de acción al seleccionar uno, agregar/editar/eliminar y exportar a Excel/PDF. Esta y Reportes son las únicas secciones que ven los usuarios Editor y Solo lectura.
+- **Evaluación Financiera Proyectos** — sección nueva, justo después de Proyectos, para asociar una evaluación financiera (proyección a 3 años, ROI, VPN, TIR, Payback, etc.) al proyecto que la necesite. Ver sección "Evaluación Financiera Proyectos" más abajo.
 
 **Nota:** si las tablas de Áreas o Responsables todavía no existen en Supabase (ver instrucciones abajo), la app no se rompe: el campo Área usa una lista fija como antes y el campo Responsable vuelve a ser de texto libre, hasta que actives las tablas.
 
@@ -282,6 +284,58 @@ Al hacer clic, pide confirmación (te avisa que va a reemplazar el Código de **
 
 No necesita ningún cambio en Supabase — usa la misma columna `codigo` que ya existe. En cuanto subas el `index.html` de este paquete, ya queda activo.
 
+## Evaluación Financiera Proyectos
+
+Sección nueva en el menú lateral, justo después de **Proyectos** (como se pidió). Sirve para asociar una evaluación financiera a cualquier proyecto que la necesite — no todos los proyectos tienen por qué tenerla, y cada proyecto puede tener como máximo una (se crea una vez y después se sigue editando, igual que el Plan de acción).
+
+**Cómo se usa:** en la lista se ve cada proyecto con un badge de estado ("Sin crear" o el veredicto de su evaluación, con semáforo de color). Al hacer clic en un proyecto se abre su panel de Evaluación Financiera abajo, con:
+
+- **Identificación del proyecto** — Nombre, Responsable y País se traen solos del proyecto (no se repiten); solo se escriben el Problema que resuelve y el Objetivo principal.
+- **Tasas de crecimiento anual** — Ingresos, Gastos y Ahorros operativos, Año 1→2 y Año 2→3.
+- **Supuestos base (Año 1)** — Ventas, Ahorros operativos, % de Costo de Ventas (COGS), Gastos operativos, Licencias/software/cloud, Gastos de desarrollo, Otros gastos, Inversión inicial (CapEx, solo Año 1) y la Tasa de descuento / WACC. Estos son los únicos datos que se escriben a mano — el resto se calcula solo, en vivo, mientras vas llenando el formulario.
+- **Proyección a 3 años** (calculada) — Ingresos, Costo de Ventas, Margen bruto, Gastos operativos/licencias/desarrollo/otros, Ahorros operativos, Beneficio Operativo (EBITDA) y Flujo de caja neto/acumulado, año por año y el total de los 3 años.
+- **Métricas financieras clave** (calculadas) — ROI, VPN, TIR, Payback, Margen bruto promedio y Relación Beneficio/Costo (B/C), cada una con su semáforo (✅/🟡/🔴) según qué tan buena sea.
+- **Veredicto** — "GO" si el ROI y el VPN son positivos, "REVISAR" si no, o "Completar todos los datos" si todavía falta llenar el formulario.
+
+Esto sigue el formato de tu archivo *"Formato BC Evaluación Financiera Proyectos.xlsx"* (hoja "Evaluación Financiera" — la hoja "Caso de negocio" del mismo archivo no se incluyó, quedó como un ejemplo aparte, no como parte del formato general). Una diferencia a propósito: el % de Costo de Ventas (COGS) se aplica directo sobre las Ventas (Costo = Ventas × %), tal como dice su propia nota de ayuda ("Retail/Farma típico: 55%-75%"); en el Excel original ese % venía jalado con una fórmula de la otra hoja (el caso de negocio de un proyecto específico) que lo dejaba invertido, y esa fórmula no aplicaba de forma general para cualquier proyecto.
+
+Cada evaluación tiene sus propios botones **Guardar**, **Excel** y **PDF** (el Excel/PDF exportan la proyección completa y las métricas, igual que se ve en pantalla).
+
+### Activar Evaluación Financiera Proyectos (una sola vez en Supabase)
+
+1. Entra a supabase.com → tu proyecto → **SQL Editor** → **New query**.
+2. Pega y ejecuta (botón **Run**) exactamente esto (también está incluido en `setup_completo_supabase.sql` de este paquete):
+
+```sql
+create table if not exists proyecto_evaluaciones_financieras (
+  id bigint generated by default as identity primary key,
+  "proyectoId" bigint not null,
+  problema text,
+  objetivo text,
+  tasa_ingresos_a2 numeric,
+  tasa_ingresos_a3 numeric,
+  tasa_gastos_a2 numeric,
+  tasa_gastos_a3 numeric,
+  tasa_ahorros_a2 numeric,
+  tasa_ahorros_a3 numeric,
+  ventas_ano1 numeric,
+  ahorros_ano1 numeric,
+  pct_cogs numeric,
+  gastos_operativos_ano1 numeric,
+  licencias_ano1 numeric,
+  gastos_desarrollo_ano1 numeric,
+  otros_gastos_ano1 numeric,
+  inversion_inicial numeric,
+  wacc numeric,
+  "createdAt" timestamptz not null default now(),
+  unique ("proyectoId")
+);
+alter table proyecto_evaluaciones_financieras disable row level security;
+grant select, insert, update, delete on proyecto_evaluaciones_financieras to anon, authenticated;
+```
+
+3. Listo. En cuanto subas el `index.html` de este paquete, la sección "Evaluación Financiera Proyectos" ya puede crear, guardar y editar evaluaciones. Si todavía no corres este SQL, la sección se ve vacía (sin marcar error) hasta que lo actives.
+
 ## Logo y créditos de autoría
 
 Se agregó el logo de Kielsa (el mismo que ya usa la app principal, tomado de ahí — círculo azul con cruz amarilla + texto "Kielsa") en el encabezado de la app y en la pantalla de inicio de sesión, además del ícono de la pestaña del navegador (favicon). Va incrustado directamente en el `index.html` como imagen (no depende de ningún archivo aparte ni de conexión a internet para cargar).
@@ -353,3 +407,5 @@ Con el nuevo "Plan de trabajo (opcional)" al agregar un proyecto probé, con cap
 **Renumerar el Código de los proyectos (27 de agosto de 2026):** me mandaste una captura donde el "Cód." de la tabla salía con huecos (5, 6, 7, 8, 9, 14, 17...) por los proyectos que habías eliminado, y pediste que el número se autogenerara de forma correlativa. Como el campo "Código" también se usa como texto libre en algunos proyectos (no siempre es un número), en vez de automatizarlo por completo agregué un botón **"Renumerar"** junto a Excel/PDF en la pantalla de Proyectos, que — con tu confirmación — le pone 1, 2, 3... a todos los proyectos según su orden de creación, de una sola vez, cuantas veces quieras usarlo. Probé, con un navegador automatizado: que el botón aparezca junto a Excel y PDF (solo para Administrador/Editor); que al hacer clic pida confirmación explicando que va a afectar a todos los proyectos; y que, tras confirmar, la columna "Cód." de la tabla quede en 1, 2, 3... en el mismo orden en que ya se mostraban los proyectos, sin huecos. Todo sin errores de consola.
 
 **Plan de acción con formato tipo Excel (1 de septiembre de 2026):** me mandaste tu Excel de "Cronograma de proyectos" (tabla + panel de Resumen de avance) y pediste que el Plan de acción de cada proyecto se viera así. Antes de tocar código aclaramos tres cosas: reemplazar la tabla actual (no dejarla como vista alterna), que la Fecha de corte del resumen fuera siempre la de hoy (no un campo editable), y que "Días" pasara a ser un dato que tú escribes (en días hábiles, lunes a viernes, sin festivos porque los proyectos son de varios países) en vez de calcularse de las dos fechas. Con eso implementé el rediseño completo: la tabla de tareas cambió a Actividad/Días/Responsable/Inicio/Terminado/% Avance/Estado/Observaciones/% Plan/Desvío (ya sin las columnas EDT y "Depende de", aunque esa dependencia se sigue usando internamente); el formulario de tarea cambió "Fecha de entrega" por "Días (hábiles)" con la fecha de término calculada sola y mostrada como vista previa antes de guardar; agregué el campo "Observaciones" por tarea; y agregué el panel de la derecha con "Resumen de avance" (avance real ponderado por días, avance planificado a la fecha, desviación y avance simple) y "Actividades por estado" (Completada/En progreso/Atrasada/No iniciada con cantidad y %). Las exportaciones a Excel y PDF del Plan de acción se actualizaron con las mismas columnas nuevas. Probé, con un navegador automatizado y capturas de pantalla: que el Plan de acción de un proyecto con tareas existentes (sin el campo "Días" guardado) muestre los Días calculados solos a partir de sus fechas, y que el resumen calcule bien el avance ponderado, el planificado y la desviación (verificado a mano con los números de cada tarea); que agregar una tarea nueva con fecha de inicio un martes y 5 días hábiles calcule "Termina" el lunes siguiente (saltándose el fin de semana), y que se guarde con esa fecha, sus Días y su Observación; que el conteo de "Actividades por estado" sea correcto; y que el Plan de trabajo de un proyecto nuevo (antes de guardarlo) también muestre la columna Días. Todo sin errores de consola.
+
+**Evaluación Financiera Proyectos (1 de septiembre de 2026):** pediste una nueva área "Evaluación Financiera Proyectos" dentro de Proyectos, amarrada al proyecto que la necesite. Aclaramos con preguntas antes de programar (que la app calculara todo automático como el Excel, que viviera como sección nueva del menú lateral justo después de Proyectos, que fuera una evaluación por proyecto editable, y que la hoja "Caso de negocio" de tu archivo no se incluyera) y después me mandaste `Formato BC Evaluación Financiera Proyectos.xlsx` con el detalle de qué debía contener. Construí la sección nueva completa: formulario de Identificación/Tasas de crecimiento/Supuestos base, y cálculo en vivo (sin guardar primero) de la Proyección a 3 años, las métricas ROI/VPN/TIR/Payback/Margen bruto promedio/B-C con semáforo, y el Veredicto — replicando las fórmulas de tu Excel (incluida la TIR, calculada por bisección ya que no hay una función nativa de IRR en el navegador). Probé, con un navegador automatizado y capturas de pantalla: que la lista de proyectos muestre "Sin crear" para los que no tienen evaluación; que abrir el panel de un proyecto traiga solo Nombre/Responsable/País (sin duplicar datos que ya tiene el proyecto); que llenar el formulario calcule en vivo la proyección y las métricas, verificado a mano contra los números esperados (Ventas Año 2 con la tasa de crecimiento aplicada, Costo de Ventas y Margen bruto con el % de COGS, etc.); que Guardar persista los datos (releídos después de cerrar y volver a abrir el panel) y actualice el badge/veredicto de la fila en la lista; y que las exportaciones a Excel y PDF no fallen. También probé casos límite a propósito — un proyecto sin Inversión inicial (para que ROI/B-C avisen "Sin datos" y Payback "Sin inversión" en vez de tronar), y un proyecto con Beneficio Operativo negativo en los 3 años (para confirmar que TIR cae a "N/D", VPN y ROI se muestran negativos sin errores, y Payback avisa "No se recupera en 3 años" en vez de decir por error "Sin inversión") — sin errores de consola en ningún caso.
