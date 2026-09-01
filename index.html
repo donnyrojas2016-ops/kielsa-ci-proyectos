@@ -442,12 +442,14 @@ function ExcBarraLabel({ bg, color, size, children }) {
 // Fila de encabezados de columna. `spans` (opcional, debe sumar 5) permite combinar columnas
 // igual que en el Excel; por defecto cada texto ocupa una sola columna. `goldLast` resalta en
 // dorado la última columna — así es en la mayoría de las tablas del Excel, pero no en todas
-// (p. ej. la de Tasas de crecimiento no la resalta), así que se puede desactivar.
-function ExcFilaEncabezado({ cols, bg, spans, goldLast = true }) {
+// (p. ej. la de Tasas de crecimiento no la resalta), así que se puede desactivar. `sticky`
+// (activado por defecto) hace que, mientras se baja dentro del recuadro con scroll propio, este
+// encabezado se quede pegado arriba — así siempre se ve a qué columna corresponde cada dato.
+function ExcFilaEncabezado({ cols, bg, spans, goldLast = true, sticky = true }) {
   return (
     <tr>
       {cols.map((c, i) => (
-        <td key={i} colSpan={spans ? spans[i] : 1} style={{background: (goldLast && i === cols.length - 1) ? EXC.gold : (bg || EXC.navy),color:"#fff",fontWeight:800,fontSize:10.5,padding:"7px 10px",textTransform:"uppercase",letterSpacing:.3,border:"1px solid "+EXC.border,whiteSpace:"nowrap"}}>{c}</td>
+        <td key={i} colSpan={spans ? spans[i] : 1} style={{background: (goldLast && i === cols.length - 1) ? EXC.gold : (bg || EXC.navy),color:"#fff",fontWeight:800,fontSize:10.5,padding:"7px 10px",textTransform:"uppercase",letterSpacing:.3,border:"1px solid "+EXC.border,whiteSpace:"nowrap",position:sticky?"sticky":"static",top:sticky?0:"auto",zIndex:sticky?3:"auto"}}>{c}</td>
       ))}
     </tr>
   );
@@ -2489,7 +2491,7 @@ function EvaluacionFinancieraPanel({ proyecto, evaluacion, paisTexto, puedeEdita
         }
       />
       <div style={{padding:"1rem 1.1rem"}}>
-        <div style={{overflowX:"auto",border:"1px solid "+EXC.border,borderRadius:8}}>
+        <div style={{overflowX:"auto",overflowY:"auto",maxHeight:"78vh",border:"1px solid "+EXC.border,borderRadius:8}}>
           <table style={{width:"100%",borderCollapse:"collapse",minWidth:960,tableLayout:"fixed"}}>
             <ExcColgroup />
             <tbody>
