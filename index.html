@@ -2438,6 +2438,7 @@ function EvaluacionFinancieraPanel({ proyecto, evaluacion, paisTexto, puedeEdita
 function EvaluacionFinancieraView({ proyectos, paises, evaluaciones, puedeEditar, onChanged }) {
   const [selectedId, setSelectedId] = useState(null);
   const [busqueda, setBusqueda] = useState("");
+  const [creando, setCreando] = useState(false);
 
   const evalPorProyecto = useMemo(() => {
     const m = {};
@@ -2447,22 +2448,60 @@ function EvaluacionFinancieraView({ proyectos, paises, evaluaciones, puedeEditar
 
   const nombrePais = id => { const p = paises.find(x => x.id === id); return p ? p.nombre : ""; };
 
+  // La lista solo muestra los proyectos que YA tienen una Evaluación Financiera creada
+  // (a pedido tuyo: la lista empieza en blanco, y para asociar un proyecto nuevo se usa
+  // el botón "Nueva evaluación" de abajo, que primero pregunta a qué proyecto amarrarla).
+  const conEvaluacion = useMemo(() => proyectos.filter(p => evalPorProyecto[p.id]), [proyectos, evalPorProyecto]);
+  const sinEvaluacion = useMemo(() =>
+    proyectos.filter(p => !evalPorProyecto[p.id]).sort((a, b) => (a.nombre || "").localeCompare(b.nombre || "")),
+    [proyectos, evalPorProyecto]
+  );
+
   const filtrados = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
-    if (!q) return proyectos;
-    return proyectos.filter(p => (p.nombre || "").toLowerCase().includes(q) || (p.codigo || "").toLowerCase().includes(q));
-  }, [proyectos, busqueda]);
+    if (!q) return conEvaluacion;
+    return conEvaluacion.filter(p => (p.nombre || "").toLowerCase().includes(q) || (p.codigo || "").toLowerCase().includes(q));
+  }, [conEvaluacion, busqueda]);
+
+  // El proyecto abierto puede o no estar en "filtrados": si se acaba de elegir en
+  // "Nueva evaluación" todavía no tiene evaluación, así que no aparece en la tabla.
+  const proyectoSeleccionado = useMemo(() => proyectos.find(p => p.id === selectedId) || null, [proyectos, selectedId]);
+  const seleccionadoEstaEnTabla = proyectoSeleccionado ? filtrados.some(p => p.id === proyectoSeleccionado.id) : false;
+
+  const elegirProyectoNuevo = (valor) => {
+    setCreando(false);
+    if (!valor) return;
+    setSelectedId(parseInt(valor));
+  };
 
   return (
     <Card mb={0}>
       <CardHeader
         icon="ti-report-money"
-        left={"Evaluación Financiera Proyectos (" + evaluaciones.length + " de " + proyectos.length + " proyectos)"}
-        right={<input value={busqueda} onChange={e => setBusqueda(e.target.value)} placeholder="Buscar proyecto..." style={{...inputStyle,width:220,padding:"0.3rem 0.6rem",fontSize:12}} />}
+        left={"Evaluación Financiera Proyectos (" + conEvaluacion.length + " de " + proyectos.length + " proyectos)"}
+        right={
+          <React.Fragment>
+            <input value={busqueda} onChange={e => setBusqueda(e.target.value)} placeholder="Buscar proyecto..." style={{...inputStyle,width:200,padding:"0.3rem 0.6rem",fontSize:12}} />
+            {puedeEditar && <Btn sm primary onClick={() => { setCreando(c => !c); setSelectedId(null); }}><i className="ti ti-plus"/> Nueva evaluación</Btn>}
+          </React.Fragment>
+        }
       />
-      <div style={{padding: proyectos.length === 0 ? "1rem 1.1rem" : 0}}>
-        {proyectos.length === 0 ? (
-          <div style={{fontSize:12,color:y.text3}}>Todavía no hay proyectos — créalos primero en "Proyectos".</div>
+
+      {creando && (
+        <div style={{padding:"0.75rem 1.1rem",borderBottom:"1px solid "+y.border,background:y.primaryLight,display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+          <label style={{fontSize:12,fontWeight:700,color:y.text2,whiteSpace:"nowrap"}}>¿Para qué proyecto es esta evaluación?</label>
+          <select defaultValue="" onChange={e => elegirProyectoNuevo(e.target.value)} style={{...inputStyle,width:360}}>
+            <option value="" disabled>Selecciona un proyecto...</option>
+            {sinEvaluacion.map(p => <option key={p.id} value={p.id}>{p.codigo ? p.codigo + " — " : ""}{p.nombre}</option>)}
+          </select>
+          {sinEvaluacion.length === 0 && <span style={{fontSize:12,color:y.text3}}>Todos los proyectos ya tienen una Evaluación Financiera creada.</span>}
+          <Btn sm onClick={() => setCreando(false)}>Cancelar</Btn>
+        </div>
+      )}
+
+      <div style={{padding: conEvaluacion.length === 0 ? "1rem 1.1rem" : 0}}>
+        {conEvaluacion.length === 0 ? (
+          <div style={{fontSize:12,color:y.text3}}>Todavía no has creado ninguna Evaluación Financiera. Usa el botón "Nueva evaluación" de arriba para elegir el proyecto y empezar.</div>
         ) : (
           <div style={{overflowX:"auto"}}>
             <table style={{width:"100%",borderCollapse:"collapse",fontSize:12.5}}>
@@ -2480,20 +2519,19 @@ function EvaluacionFinancieraView({ proyectos, paises, evaluaciones, puedeEditar
                 {filtrados.map(p => {
                   const ev = evalPorProyecto[p.id];
                   const seleccionado = selectedId === p.id;
-                  const badge = ev
-                    ? (() => { const c = calcularEvaluacionFinanciera(ev); const v = veredictoFinanciero(c.roi, c.vpn); return <span style={{display:"inline-flex",padding:"3px 9px",borderRadius:20,fontSize:10.5,fontWeight:700,background:v.bg,color:v.color}}>{v.texto}</span>; })()
-                    : <span style={{display:"inline-flex",padding:"3px 9px",borderRadius:20,fontSize:10.5,fontWeight:700,background:y.grayBg,color:y.gray}}>Sin crear</span>;
+                  const c = calcularEvaluacionFinanciera(ev);
+                  const v = veredictoFinanciero(c.roi, c.vpn);
                   return (
                     <React.Fragment key={p.id}>
-                      <tr onClick={() => setSelectedId(sel => sel === p.id ? null : p.id)} style={{borderBottom: seleccionado ? "none" : "1px solid "+y.border,cursor:"pointer",background: seleccionado ? y.primaryLight : "transparent"}}>
+                      <tr onClick={() => { setCreando(false); setSelectedId(sel => sel === p.id ? null : p.id); }} style={{borderBottom: seleccionado ? "none" : "1px solid "+y.border,cursor:"pointer",background: seleccionado ? y.primaryLight : "transparent"}}>
                         <td style={{padding:"6px 8px",fontSize:12}}>{p.codigo}</td>
                         <td style={{padding:"6px 8px",fontSize:12,fontWeight:600,maxWidth:280}}>
                           {seleccionado && <i className="ti ti-chevron-down" style={{color:y.primary,marginRight:4}}/>}
                           {p.nombre}
                         </td>
                         <td style={{padding:"6px 8px",fontSize:12}}>{p.pais_id ? bandera(nombrePais(p.pais_id)) + " " + nombrePais(p.pais_id) : ""}</td>
-                        <td style={{padding:"6px 8px"}}>{badge}</td>
-                        <td style={{padding:"6px 8px",textAlign:"right",whiteSpace:"nowrap"}}><Btn sm>{ev ? "Ver / editar" : "Crear"}</Btn></td>
+                        <td style={{padding:"6px 8px"}}><span style={{display:"inline-flex",padding:"3px 9px",borderRadius:20,fontSize:10.5,fontWeight:700,background:v.bg,color:v.color}}>{v.texto}</span></td>
+                        <td style={{padding:"6px 8px",textAlign:"right",whiteSpace:"nowrap"}}><Btn sm>Ver / editar</Btn></td>
                       </tr>
                       {seleccionado && (
                         <tr>
@@ -2501,7 +2539,7 @@ function EvaluacionFinancieraView({ proyectos, paises, evaluaciones, puedeEditar
                             <EvaluacionFinancieraPanel
                               key={p.id}
                               proyecto={p}
-                              evaluacion={ev || null}
+                              evaluacion={ev}
                               paisTexto={p.pais_id ? nombrePais(p.pais_id) : ""}
                               puedeEditar={puedeEditar}
                               onChanged={onChanged}
@@ -2518,6 +2556,20 @@ function EvaluacionFinancieraView({ proyectos, paises, evaluaciones, puedeEditar
           </div>
         )}
       </div>
+
+      {proyectoSeleccionado && !seleccionadoEstaEnTabla && (
+        <div style={{padding:"0.75rem 1.1rem",borderTop:"1px solid "+y.border,background:y.grayBg}}>
+          <EvaluacionFinancieraPanel
+            key={proyectoSeleccionado.id}
+            proyecto={proyectoSeleccionado}
+            evaluacion={evalPorProyecto[proyectoSeleccionado.id] || null}
+            paisTexto={proyectoSeleccionado.pais_id ? nombrePais(proyectoSeleccionado.pais_id) : ""}
+            puedeEditar={puedeEditar}
+            onChanged={onChanged}
+            onClose={() => setSelectedId(null)}
+          />
+        </div>
+      )}
     </Card>
   );
 }
