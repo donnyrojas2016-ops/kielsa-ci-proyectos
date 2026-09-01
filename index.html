@@ -317,8 +317,9 @@ function irrFinanciero(cashflows) {
 
 function formatearMonedaEval(n) {
   if (n == null || !isFinite(n)) return "—";
+  // Mismo formato de número que la plantilla: #,##0 "L" (el sufijo "L" va después del número).
   const abs = Math.round(Math.abs(n)).toLocaleString("es-HN");
-  return (n < 0 ? "-L " : "L ") + abs;
+  return (n < 0 ? "-" : "") + abs + " L";
 }
 function formatearPctEval(n, dec) {
   if (n == null || !isFinite(n)) return "—";
@@ -326,7 +327,7 @@ function formatearPctEval(n, dec) {
 }
 function formatearAniosEval(n) {
   if (n == null || !isFinite(n)) return "—";
-  return n.toFixed(2) + " años";
+  return n.toFixed(1) + " años";
 }
 
 function semaforoROI(roi) {
@@ -377,6 +378,53 @@ function evaluacionFinancieraVacia() {
   EVAL_FIN_PCT_FIELDS.forEach(k => o[k] = "");
   EVAL_FIN_NUM_FIELDS.forEach(k => o[k] = "");
   return o;
+}
+
+// Paleta EXACTA de "Formato BC Evaluación Financiera Proyectos.xlsx" (colores de relleno y de
+// letra tomados directo del archivo), para que la sección se vea igual que el Excel original.
+const EXC = {
+  navy: "#1B3A6B", blue: "#2E5FA3", teal: "#00695C", tealLight: "#E0F2F1",
+  purple: "#4527A0", gold: "#C8962A", red: "#C0392B", redLight: "#FDECEA",
+  green: "#1A7A4A", greenLight: "#E8F5E9", orange: "#FF8F00",
+  yellowBg: "#FFF8E1", yellowText: "#1565C0", tip: "#E65100",
+  grayBg: "#F5F6FA", grayText: "#212121", grayText2: "#333333", grayText3: "#444444",
+  totalBg: "#D6E4F7", border: "#D7DCE5", white: "#FFFFFF"
+};
+// Celda de solo lectura (texto o número ya calculado / traído de otra parte de la app).
+function ExcCelda({ bg, color, bold, size, align, children, italic, colSpan }) {
+  return (
+    <td colSpan={colSpan} style={{padding:"7px 10px",background:bg||EXC.white,color:color||EXC.grayText,fontWeight:bold?700:400,fontStyle:italic?"italic":"normal",fontSize:size||11.5,textAlign:align||"left",border:"1px solid "+EXC.border,verticalAlign:"middle"}}>{children}</td>
+  );
+}
+// Celda "amarilla" editable (el dato que tú escribes), o su versión deshabilitada (para los
+// campos que en esta app se traen solos del proyecto, como Nombre/Responsable/País).
+function ExcInput({ value, onChange, disabled, size, suffix, prefix, placeholder, type, align, colSpan, bg }) {
+  return (
+    <td colSpan={colSpan} style={{padding:0,background:disabled?"#EEE9D5":(bg||EXC.yellowBg),border:"1px solid "+EXC.border}}>
+      <div style={{position:"relative",display:"flex",alignItems:"center"}}>
+        {prefix && <span style={{paddingLeft:10,fontSize:11,color:EXC.yellowText,fontWeight:700,flexShrink:0}}>{prefix}</span>}
+        <input
+          type={type || "text"} disabled={disabled} value={value} onChange={onChange} placeholder={placeholder}
+          style={{width:"100%",padding:"7px 10px",paddingLeft:prefix?4:10,paddingRight:suffix?26:10,border:"none",outline:"none",background:"transparent",color:disabled?EXC.grayText3:EXC.yellowText,fontWeight:700,fontSize:size||12.5,fontFamily:"inherit",textAlign:align||"left",fontStyle:disabled?"italic":"normal",cursor:disabled?"default":"text"}}
+        />
+        {suffix && <span style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",fontSize:11,color:disabled?EXC.grayText3:EXC.yellowText,fontWeight:700}}>{suffix}</span>}
+      </div>
+    </td>
+  );
+}
+// Barra de encabezado de sección (el bloque de color de todo el ancho, como en el Excel).
+function ExcBarra({ bg, colSpan, size, children }) {
+  return <tr><td colSpan={colSpan||5} style={{background:bg,color:"#fff",fontWeight:800,fontSize:size||12.5,padding:"9px 10px",border:"1px solid "+EXC.border}}>{children}</td></tr>;
+}
+// Fila de encabezados de columna (5 columnas, la última resaltada en dorado como en el Excel).
+function ExcFilaEncabezado({ cols, bg }) {
+  return (
+    <tr>
+      {cols.map((c, i) => (
+        <td key={i} style={{background: i === cols.length - 1 ? EXC.gold : (bg || EXC.navy),color:"#fff",fontWeight:800,fontSize:10.5,padding:"7px 10px",textTransform:"uppercase",letterSpacing:.3,border:"1px solid "+EXC.border,whiteSpace:"nowrap"}}>{c}</td>
+      ))}
+    </tr>
+  );
 }
 
 /* ---------- Carga masiva de planes de trabajo desde Excel ---------- */
@@ -2316,23 +2364,32 @@ function EvaluacionFinancieraPanel({ proyecto, evaluacion, paisTexto, puedeEdita
     doc.save("Evaluacion_Financiera_" + nombreArchivoBase + ".pdf");
   };
 
-  const CampoPct = (label, k) => (
-    <div key={k}>
-      <label style={labelStyle}>{label}</label>
-      <div style={{position:"relative"}}>
-        <input type="number" step="any" disabled={!puedeEditar} value={campos[k]} onChange={e => set(k, e.target.value)} placeholder="0" style={{...inputStyle,paddingRight:26}} />
-        <span style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",fontSize:11,color:y.text3}}>%</span>
-      </div>
-    </div>
+  // Fila de "Tasas de crecimiento anual": 2 celdas amarillas (% Año1→2 y % Año2→3) + nota de uso.
+  const FilaTasa = (label, k2, k3, nota) => (
+    <tr key={k2}>
+      <ExcCelda colSpan={2} bg={EXC.grayBg} bold>{label}</ExcCelda>
+      <ExcInput value={campos[k2]} onChange={e => set(k2, e.target.value)} disabled={!puedeEditar} suffix="%" align="right" />
+      <ExcInput value={campos[k3]} onChange={e => set(k3, e.target.value)} disabled={!puedeEditar} suffix="%" align="right" />
+      <ExcCelda italic size={10.5} color={EXC.grayText3}>{nota}</ExcCelda>
+    </tr>
   );
-  const CampoNum = (label, k) => (
-    <div key={k}>
-      <label style={labelStyle}>{label}</label>
-      <div style={{position:"relative"}}>
-        <span style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",fontSize:11,color:y.text3}}>L</span>
-        <input type="number" step="any" disabled={!puedeEditar} value={campos[k]} onChange={e => set(k, e.target.value)} placeholder="0" style={{...inputStyle,paddingLeft:22}} />
-      </div>
-    </div>
+  // Fila de "Supuestos base": etiqueta (3 col) + una sola celda amarilla editable (2 col, con L o %).
+  const FilaSupuesto = (label, k, tipo, labelColor) => (
+    <tr key={k}>
+      <ExcCelda colSpan={3} bg={EXC.white} color={labelColor}>{label}</ExcCelda>
+      {tipo === "pct"
+        ? <ExcInput colSpan={2} value={campos[k]} onChange={e => set(k, e.target.value)} disabled={!puedeEditar} suffix="%" align="right" />
+        : <ExcInput colSpan={2} value={campos[k]} onChange={e => set(k, e.target.value)} disabled={!puedeEditar} prefix="L" align="right" />}
+    </tr>
+  );
+  // Fila de proyección (Estado de resultados / Flujo de caja): igual estructura que el Excel,
+  // celdas grises porque son valores calculados automáticamente (no se escriben a mano).
+  const FilaCalc = ([label, valores, total, fmt, destacada]) => (
+    <tr key={label}>
+      <ExcCelda bold={destacada} bg={destacada ? EXC.totalBg : EXC.white}>{label}</ExcCelda>
+      {valores.map((v, i) => <ExcCelda key={i} align="right" bold={destacada} bg={destacada ? EXC.totalBg : EXC.grayBg}>{fmt(v)}</ExcCelda>)}
+      <ExcCelda align="right" bold bg={destacada ? EXC.totalBg : EXC.tealLight}>{total != null ? fmt(total) : ""}</ExcCelda>
+    </tr>
   );
 
   return (
@@ -2350,85 +2407,99 @@ function EvaluacionFinancieraPanel({ proyecto, evaluacion, paisTexto, puedeEdita
         }
       />
       <div style={{padding:"1rem 1.1rem"}}>
-        <SectionTitle first>Identificación del proyecto</SectionTitle>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:10}}>
-          <div><label style={labelStyle}>Nombre del proyecto</label><div style={{...inputStyle,background:y.grayBg,color:y.text2}}>{proyecto.nombre || "—"}</div></div>
-          <div><label style={labelStyle}>Responsable / Líder</label><div style={{...inputStyle,background:y.grayBg,color:y.text2}}>{proyecto.responsable || "—"}</div></div>
-          <div><label style={labelStyle}>Unidad / País</label><div style={{...inputStyle,background:y.grayBg,color:y.text2}}>{paisTexto || "—"}</div></div>
-        </div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
-          <div><label style={labelStyle}>Problema que resuelve (una línea)</label><textarea disabled={!puedeEditar} value={campos.problema} onChange={e => set("problema", e.target.value)} rows={2} style={{...inputStyle,resize:"vertical"}} /></div>
-          <div><label style={labelStyle}>Objetivo principal del proyecto</label><textarea disabled={!puedeEditar} value={campos.objetivo} onChange={e => set("objetivo", e.target.value)} rows={2} style={{...inputStyle,resize:"vertical"}} /></div>
+        {/* Leyenda de colores, igual convención que el archivo Excel original */}
+        <div style={{display:"flex",gap:16,alignItems:"center",marginBottom:10,fontSize:11,color:EXC.grayText3,flexWrap:"wrap"}}>
+          <span style={{display:"inline-flex",alignItems:"center",gap:6}}><span style={{width:14,height:14,borderRadius:3,background:EXC.yellowBg,border:"1px solid "+EXC.border,display:"inline-block"}}/> Celda editable (tú la escribes)</span>
+          <span style={{display:"inline-flex",alignItems:"center",gap:6}}><span style={{width:14,height:14,borderRadius:3,background:EXC.grayBg,border:"1px solid "+EXC.border,display:"inline-block"}}/> Celda automática (se calcula sola)</span>
         </div>
 
-        <SectionTitle>Tasas de crecimiento anual</SectionTitle>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:16}}>
-          {CampoPct("Ingresos — Año 1→2", "tasa_ingresos_a2")}
-          {CampoPct("Ingresos — Año 2→3", "tasa_ingresos_a3")}
-          <div/>
-          {CampoPct("Gastos — Año 1→2", "tasa_gastos_a2")}
-          {CampoPct("Gastos — Año 2→3", "tasa_gastos_a3")}
-          <div/>
-          {CampoPct("Ahorros operativos — Año 1→2", "tasa_ahorros_a2")}
-          {CampoPct("Ahorros operativos — Año 2→3", "tasa_ahorros_a3")}
-        </div>
+        <div style={{overflowX:"auto",border:"1px solid "+EXC.border,borderRadius:8}}>
+          <table style={{width:"100%",borderCollapse:"collapse",minWidth:820}}>
+            <tbody>
+              <ExcBarra bg={EXC.navy} size={14}>EVALUACIÓN FINANCIERA DE PROYECTOS</ExcBarra>
+              <ExcBarra bg={EXC.blue}>{(proyecto.codigo ? proyecto.codigo + " — " : "") + (proyecto.nombre || "")}</ExcBarra>
 
-        <SectionTitle>Supuestos base (valores del Año 1)</SectionTitle>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:16}}>
-          {CampoNum("Ventas / ingresos directos", "ventas_ano1")}
-          {CampoNum("Ahorros operativos / eficiencias", "ahorros_ano1")}
-          {CampoPct("% Costo de Ventas sobre Ingresos (COGS)", "pct_cogs")}
-          {CampoNum("Gastos operativos (personal, alquiler...)", "gastos_operativos_ano1")}
-          {CampoNum("Licencias, software, cloud", "licencias_ano1")}
-          {CampoNum("Gastos de desarrollo (TI)", "gastos_desarrollo_ano1")}
-          {CampoNum("Otros gastos / contingencia", "otros_gastos_ano1")}
-          {CampoNum("Inversión inicial (CapEx, solo Año 1)", "inversion_inicial")}
-          {CampoPct("Tasa de descuento / WACC", "wacc")}
-        </div>
+              {/* 📌 Identificación del proyecto */}
+              <ExcBarra bg={EXC.navy}>📌 IDENTIFICACIÓN DEL PROYECTO</ExcBarra>
+              <tr>
+                <ExcCelda colSpan={2} bg={EXC.grayBg} bold>Nombre del proyecto</ExcCelda>
+                <ExcInput colSpan={3} value={proyecto.nombre || ""} onChange={() => {}} disabled />
+              </tr>
+              <tr>
+                <ExcCelda colSpan={2} bg={EXC.grayBg} bold>Responsable / Líder</ExcCelda>
+                <ExcInput colSpan={3} value={proyecto.responsable || ""} onChange={() => {}} disabled />
+              </tr>
+              <tr>
+                <ExcCelda colSpan={2} bg={EXC.grayBg} bold>Unidad / País</ExcCelda>
+                <ExcInput colSpan={3} value={paisTexto || ""} onChange={() => {}} disabled />
+              </tr>
+              <tr>
+                <ExcCelda colSpan={2} bg={EXC.grayBg} bold>Problema que resuelve</ExcCelda>
+                <ExcInput colSpan={3} value={campos.problema} onChange={e => set("problema", e.target.value)} disabled={!puedeEditar} placeholder="¿Qué problema resuelve este proyecto?" />
+              </tr>
+              <tr>
+                <ExcCelda colSpan={2} bg={EXC.grayBg} bold>Objetivo principal</ExcCelda>
+                <ExcInput colSpan={3} value={campos.objetivo} onChange={e => set("objetivo", e.target.value)} disabled={!puedeEditar} placeholder="¿Qué se quiere lograr con este proyecto?" />
+              </tr>
 
-        {!tieneDatos ? (
-          <div style={{fontSize:12,color:y.text3,padding:"0.5rem 0"}}>Completa al menos las Ventas o la Inversión inicial del Año 1 para ver la proyección calculada.</div>
-        ) : (
-          <React.Fragment>
-            <SectionTitle>Proyección a 3 años</SectionTitle>
-            <div style={{overflowX:"auto",marginBottom:16}}>
-              <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,minWidth:640}}>
-                <thead>
-                  <tr style={{background:y.grayBg}}>
-                    {["Concepto","Año 1","Año 2","Año 3","Total 3 años"].map(h => (
-                      <th key={h} style={{textAlign:"left",fontSize:10,fontWeight:800,color:y.text3,textTransform:"uppercase",letterSpacing:.3,padding:"0.5rem 0.5rem",borderBottom:"1px solid "+y.border,whiteSpace:"nowrap"}}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {filasProyeccion.map(([label, valores, total, fmt, destacada]) => (
-                    <tr key={label} style={{borderBottom:"1px solid "+y.grayBg,fontWeight: destacada?800:400,background: destacada?y.grayBg:"transparent"}}>
-                      <td style={{padding:"0.4rem 0.5rem",color:y.text}}>{label}</td>
-                      {valores.map((v, i) => <td key={i} style={{padding:"0.4rem 0.5rem",color:y.text2,whiteSpace:"nowrap"}}>{fmt(v)}</td>)}
-                      <td style={{padding:"0.4rem 0.5rem",color:y.text,fontWeight:700,whiteSpace:"nowrap"}}>{total != null ? fmt(total) : ""}</td>
+              {/* ⚙️ Tasas de crecimiento anual */}
+              <ExcBarra bg={EXC.teal}>⚙️ TASAS DE CRECIMIENTO ANUAL</ExcBarra>
+              <ExcFilaEncabezado bg={EXC.teal} cols={["Concepto", "Año 1 → 2", "Año 2 → 3", "¿Para qué sirve?"]} />
+              {FilaTasa("Ingresos", "tasa_ingresos_a2", "tasa_ingresos_a3", "Con qué % crecen tus ventas cada año")}
+              {FilaTasa("Gastos", "tasa_gastos_a2", "tasa_gastos_a3", "Con qué % suben tus costos cada año")}
+              {FilaTasa("Ahorros operativos", "tasa_ahorros_a2", "tasa_ahorros_a3", "Con qué % crecen los ahorros por eficiencia")}
+
+              {/* 💼 Supuestos base */}
+              <ExcBarra bg={EXC.purple}>💼 SUPUESTOS BASE (VALORES DEL AÑO 1)</ExcBarra>
+              <ExcBarra bg={EXC.green} size={11}>INGRESOS</ExcBarra>
+              {FilaSupuesto("Ventas / ingresos directos", "ventas_ano1", "num")}
+              {FilaSupuesto("Ahorros operativos / eficiencias", "ahorros_ano1", "num")}
+              <ExcBarra bg={EXC.red} size={11}>GASTOS Y COSTOS</ExcBarra>
+              {FilaSupuesto("% Costo de Ventas sobre Ingresos (COGS)", "pct_cogs", "pct")}
+              {FilaSupuesto("Gastos operativos (personal, alquiler...)", "gastos_operativos_ano1", "num")}
+              {FilaSupuesto("Licencias, software, cloud", "licencias_ano1", "num")}
+              {FilaSupuesto("Gastos de desarrollo (TI)", "gastos_desarrollo_ano1", "num", EXC.red)}
+              {FilaSupuesto("Otros gastos / contingencia", "otros_gastos_ano1", "num")}
+              <ExcBarra bg={EXC.orange} size={11}>INVERSIÓN INICIAL</ExcBarra>
+              {FilaSupuesto("Inversión inicial (CapEx, solo Año 1)", "inversion_inicial", "num")}
+              {FilaSupuesto("Tasa de descuento / WACC", "wacc", "pct")}
+
+              {!tieneDatos ? (
+                <tr><ExcCelda colSpan={5} italic color={EXC.grayText3}>Completa al menos las Ventas o la Inversión inicial del Año 1 para ver la proyección calculada.</ExcCelda></tr>
+              ) : (
+                <React.Fragment>
+                  {/* 📊 Estado de Resultados (P&L) */}
+                  <ExcBarra bg={EXC.navy}>📊 ESTADO DE RESULTADOS (P&amp;L)</ExcBarra>
+                  <ExcFilaEncabezado bg={EXC.navy} cols={["Concepto", "Año 1", "Año 2", "Año 3", "Total 3 años"]} />
+                  {filasProyeccion.slice(0, 11).map(FilaCalc)}
+
+                  {/* 💰 Flujo de Caja */}
+                  <ExcBarra bg={EXC.blue}>💰 FLUJO DE CAJA</ExcBarra>
+                  <ExcFilaEncabezado bg={EXC.blue} cols={["Concepto", "Año 1", "Año 2", "Año 3", "Total 3 años"]} />
+                  {filasProyeccion.slice(11).map(FilaCalc)}
+
+                  {/* 🏆 Métricas financieras clave */}
+                  <ExcBarra bg={EXC.gold}>🏆 MÉTRICAS FINANCIERAS CLAVE</ExcBarra>
+                  <ExcFilaEncabezado bg={EXC.gold} cols={["Métrica", "Resultado", "Semáforo"]} />
+                  {metricas.map(([label, valor, sem]) => (
+                    <tr key={label}>
+                      <ExcCelda colSpan={2} bg={EXC.grayBg} bold>{label}</ExcCelda>
+                      <ExcCelda colSpan={2} align="right" bold>{valor}</ExcCelda>
+                      <ExcCelda color={EXC.grayText3}>{sem.texto}</ExcCelda>
                     </tr>
                   ))}
-                </tbody>
-              </table>
-            </div>
 
-            <SectionTitle>Métricas financieras clave</SectionTitle>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,marginBottom:16}}>
-              {metricas.map(([label, valor, sem]) => (
-                <div key={label} style={{border:"1px solid "+y.border,borderRadius:10,padding:"0.75rem 0.9rem"}}>
-                  <div style={{fontSize:10,fontWeight:800,color:y.text3,textTransform:"uppercase",letterSpacing:.3,marginBottom:4}}>{label}</div>
-                  <div style={{fontSize:17,fontWeight:800,color:y.text,marginBottom:6}}>{valor}</div>
-                  <span style={{display:"inline-flex",padding:"3px 9px",borderRadius:20,fontSize:10.5,fontWeight:700,background:sem.bg,color:sem.color}}>{sem.texto}</span>
-                </div>
-              ))}
-            </div>
-
-            <div style={{border:"1px solid "+y.border,borderRadius:10,padding:"0.85rem 1rem",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap",background:veredicto.bg}}>
-              <span style={{fontSize:11,fontWeight:800,color:y.text2,textTransform:"uppercase",letterSpacing:.3}}>Veredicto</span>
-              <strong style={{fontSize:13,color:veredicto.color}}>{veredicto.texto}</strong>
-            </div>
-          </React.Fragment>
-        )}
+                  {/* Veredicto del CFO */}
+                  <tr>
+                    <td colSpan={5} style={{background:veredicto.bg,color:veredicto.color,fontWeight:800,fontSize:13,padding:"11px 12px",textAlign:"center",border:"1px solid "+EXC.border}}>
+                      VEREDICTO DEL CFO: {veredicto.texto}
+                    </td>
+                  </tr>
+                </React.Fragment>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </Card>
   );
