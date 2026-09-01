@@ -116,6 +116,97 @@ function duracionDias(inicio, entrega) {
   return Math.round((b - a) / 86400000);
 }
 
+/* ---------- Días hábiles del Plan de acción ---------- */
+// No se excluyen días festivos porque los proyectos son de varios países, cada uno con su propio calendario.
+function esFinDeSemana(fecha) {
+  const dow = fecha.getDay();
+  return dow === 0 || dow === 6;
+}
+
+// Suma "dias" días hábiles a partir de fechaInicioISO (el día de inicio cuenta como día 1 si es hábil;
+// si cae en fin de semana, el conteo arranca en el primer día hábil siguiente). Devuelve "YYYY-MM-DD".
+function sumarDiasHabiles(fechaInicioISO, dias) {
+  if (!fechaInicioISO) return null;
+  const n = parseInt(dias) || 1;
+  const fecha = new Date(fechaInicioISO + "T00:00:00");
+  if (isNaN(fecha.getTime())) return null;
+  let contados = 0;
+  while (true) {
+    if (!esFinDeSemana(fecha)) {
+      contados++;
+      if (contados >= n) break;
+    }
+    fecha.setDate(fecha.getDate() + 1);
+  }
+  const yy = fecha.getFullYear(), mm = String(fecha.getMonth() + 1).padStart(2, "0"), dd = String(fecha.getDate()).padStart(2, "0");
+  return yy + "-" + mm + "-" + dd;
+}
+
+// Cuenta los días hábiles entre dos fechas ISO, ambas incluidas — para calcular "Días" de tareas
+// que ya tenían fecha de inicio y de entrega guardadas, de antes de existir este campo.
+function diasHabilesEntreFechas(inicioISO, finISO) {
+  if (!inicioISO || !finISO) return null;
+  const inicio = new Date(inicioISO + "T00:00:00");
+  const fin = new Date(finISO + "T00:00:00");
+  if (isNaN(inicio.getTime()) || isNaN(fin.getTime()) || fin < inicio) return null;
+  let contados = 0;
+  const fecha = new Date(inicio);
+  while (fecha <= fin) {
+    if (!esFinDeSemana(fecha)) contados++;
+    fecha.setDate(fecha.getDate() + 1);
+  }
+  return contados;
+}
+
+// "Días" de una tarea: usa el valor guardado si existe; si es una tarea de antes de tener este
+// campo (solo con fecha de inicio y de entrega), lo calcula a partir de esas fechas.
+function diasHabilesTarea(t) {
+  if (t.dias !== null && t.dias !== undefined && t.dias !== "") {
+    const n = parseInt(t.dias);
+    if (!isNaN(n)) return n;
+  }
+  return diasHabilesEntreFechas(t.fecha_inicio, t.fecha_entrega);
+}
+
+// % de avance que "debería" tener la tarea a la fecha de corte, según su Inicio y sus Días hábiles —
+// para comparar avance real vs. avance planificado, igual que en el Cronograma en Excel.
+function avancePlanTarea(t, fechaCorteISO) {
+  if (!t.fecha_inicio) return null;
+  const dias = diasHabilesTarea(t);
+  if (!dias) return null;
+  const inicio = new Date(t.fecha_inicio + "T00:00:00");
+  const corte = new Date(fechaCorteISO + "T00:00:00");
+  if (isNaN(inicio.getTime()) || isNaN(corte.getTime())) return null;
+  if (corte < inicio) return 0;
+  const transcurridos = diasHabilesEntreFechas(t.fecha_inicio, fechaCorteISO) || 0;
+  return Math.max(0, Math.min(100, Math.round((transcurridos / dias) * 100)));
+}
+
+// Fecha de hoy en formato "YYYY-MM-DD", usada como fecha de corte del resumen del Plan de acción.
+function fechaHoyISO() {
+  const hoy = new Date();
+  const yy = hoy.getFullYear(), mm = String(hoy.getMonth() + 1).padStart(2, "0"), dd = String(hoy.getDate()).padStart(2, "0");
+  return yy + "-" + mm + "-" + dd;
+}
+
+const MESES_ABREV = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
+function formatearFechaCorta(iso) {
+  if (!iso) return "—";
+  const d = new Date(iso + "T00:00:00");
+  if (isNaN(d.getTime())) return iso;
+  return String(d.getDate()).padStart(2,"0") + "-" + MESES_ABREV[d.getMonth()] + "-" + d.getFullYear();
+}
+
+// Traduce el estatus efectivo de una tarea a las etiquetas del resumen "Actividades por estado"
+// (mismo significado, solo cambia cómo se llama ahí: Pendiente -> No iniciada, En proceso -> En progreso, Vencida -> Atrasada).
+function estatusResumen(t) {
+  const est = estatusEfectivoTarea(t);
+  if (est === "Pendiente") return "No iniciada";
+  if (est === "En proceso") return "En progreso";
+  if (est === "Vencida") return "Atrasada";
+  return est; // "Completada"
+}
+
 /* ---------- Carga masiva de planes de trabajo desde Excel ---------- */
 // Convierte un valor de celda de Excel (número de serie, objeto Date o texto) a "YYYY-MM-DD".
 function normalizarFechaExcel(v) {
@@ -203,7 +294,20 @@ function parsearFilasExcelTareas(filasCrudas) {
 
     const responsable = String(valor(fila,"responsable") || "").trim();
     const fechaInicio = normalizarFechaExcel(valor(fila,"inicio") || valor(fila,"fechainicio") || valor(fila,"fechadeinicio"));
-    const fechaEntrega = normalizarFechaExcel(valor(fila,"entrega") || valor(fila,"fechaentrega") || valor(fila,"fechadeentrega") || valor(fila,"vencimiento"));
+    let fechaEntrega = normalizarFechaExcel(valor(fila,"entrega") || valor(fila,"fechaentrega") || valor(fila,"fechadeentrega") || valor(fila,"vencimiento") || valor(fila,"terminado") || valor(fila,"fechaterminado"));
+
+    const diasRaw = valor(fila,"dias") !== undefined && valor(fila,"dias") !== "" ? valor(fila,"dias") : valor(fila,"diashabiles");
+    let dias = diasRaw !== undefined ? parseInt(diasRaw) : null;
+    if (dias != null && isNaN(dias)) dias = null;
+    // Si el archivo trae "Entrega" directo, se respeta esa fecha (y se calculan los Días a partir de ella si no vinieron).
+    // Si en cambio trae "Días" pero no "Entrega", la fecha de entrega se calcula sola en días hábiles.
+    if (!fechaEntrega && fechaInicio && dias) {
+      fechaEntrega = sumarDiasHabiles(fechaInicio, dias);
+    } else if (fechaEntrega && dias == null && fechaInicio) {
+      dias = diasHabilesEntreFechas(fechaInicio, fechaEntrega);
+    }
+
+    const observaciones = String(valor(fila,"observaciones") || valor(fila,"observacion") || valor(fila,"notas") || "").trim();
 
     const avanceRaw = valor(fila,"avance") !== undefined && valor(fila,"avance") !== "" ? valor(fila,"avance") : valor(fila,"porcentajeavance");
     let avance = parseInt(avanceRaw);
@@ -230,10 +334,12 @@ function parsearFilasExcelTareas(filasCrudas) {
       titulo,
       responsable: responsable || null,
       fecha_inicio: fechaInicio,
+      dias,
       fecha_entrega: fechaEntrega,
       porcentaje_avance: avance,
       estatus,
-      completada: estatus === "Completada"
+      completada: estatus === "Completada",
+      observaciones: observaciones || null
     });
   }
   return tareas;
@@ -242,12 +348,12 @@ function parsearFilasExcelTareas(filasCrudas) {
 // Genera y descarga una plantilla .xlsx con el formato esperado para la carga masiva.
 function descargarPlantillaExcel() {
   const filas = [
-    ["EDT", "Tarea", "Responsable", "Inicio", "Entrega", "% Avance", "Estatus", "Depende de (EDT)"],
-    [1, "Ej: Levantamiento de requerimientos", "Ana Pérez", "2026-09-01", "2026-09-05", 0, "Pendiente", ""],
-    [2, "Ej: Desarrollo", "Carlos Gómez", "2026-09-06", "2026-09-20", 0, "Pendiente", 1]
+    ["EDT", "Tarea", "Responsable", "Inicio", "Días (hábiles)", "% Avance", "Estatus", "Observaciones", "Depende de (EDT)"],
+    [1, "Ej: Levantamiento de requerimientos", "Ana Pérez", "2026-09-01", 5, 0, "Pendiente", "", ""],
+    [2, "Ej: Desarrollo", "Carlos Gómez", "2026-09-08", 10, 0, "Pendiente", "", 1]
   ];
   const ws = XLSX.utils.aoa_to_sheet(filas);
-  ws["!cols"] = [{ wch: 6 }, { wch: 42 }, { wch: 20 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 14 }, { wch: 18 }];
+  ws["!cols"] = [{ wch: 6 }, { wch: 42 }, { wch: 20 }, { wch: 12 }, { wch: 14 }, { wch: 10 }, { wch: 14 }, { wch: 30 }, { wch: 18 }];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Plan de trabajo");
   XLSX.writeFile(wb, "Plantilla_plan_de_trabajo.xlsx");
@@ -445,11 +551,17 @@ function TareaForm({ tarea, tareasProyecto, responsables, responsablesDisponible
   const [responsable, setResponsable] = useState(tarea ? tarea.responsable || "" : "");
   const [dependeId, setDependeId] = useState(tarea && tarea.depende_id ? String(tarea.depende_id) : "");
   const [fechaInicio, setFechaInicio] = useState(tarea ? tarea.fecha_inicio || "" : "");
-  const [fechaEntrega, setFechaEntrega] = useState(tarea ? tarea.fecha_entrega || "" : "");
+  const [dias, setDias] = useState(() => {
+    if (!tarea) return 1;
+    const d = diasHabilesTarea(tarea);
+    return d != null ? d : 1;
+  });
   const [avance, setAvance] = useState(tarea ? avanceTarea(tarea) : 0);
   const [estatus, setEstatus] = useState(tarea ? (tarea.estatus || (tarea.completada ? "Completada" : "Pendiente")) : "Pendiente");
+  const [observaciones, setObservaciones] = useState(tarea ? tarea.observaciones || "" : "");
 
   const opcionesDependencia = tareasProyecto.filter(t => !tarea || t.id !== tarea.id);
+  const fechaEntregaCalculada = fechaInicio ? sumarDiasHabiles(fechaInicio, dias) : null;
 
   const guardar = () => {
     if (!titulo.trim()) { alert("El nombre de la tarea es obligatorio."); return; }
@@ -458,10 +570,12 @@ function TareaForm({ tarea, tareasProyecto, responsables, responsablesDisponible
       responsable: responsable || null,
       depende_id: dependeId ? parseInt(dependeId) : null,
       fecha_inicio: fechaInicio || null,
-      fecha_entrega: fechaEntrega || null,
+      dias: fechaInicio ? (parseInt(dias) || 1) : null,
+      fecha_entrega: fechaInicio ? sumarDiasHabiles(fechaInicio, dias) : null,
       porcentaje_avance: parseInt(avance) || 0,
       estatus,
-      completada: estatus === "Completada"
+      completada: estatus === "Completada",
+      observaciones: observaciones.trim() || null
     });
   };
 
@@ -494,17 +608,23 @@ function TareaForm({ tarea, tareasProyecto, responsables, responsablesDisponible
           </select>
         </div>
       </div>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:10}}>
         <div>
           <label style={{...labelStyle,color:y.primary}}>Fecha de inicio</label>
           <input type="date" value={fechaInicio} onChange={e => setFechaInicio(e.target.value)} style={{...inputStyle,fontSize:12.5}} />
         </div>
         <div>
-          <label style={{...labelStyle,color:y.primary}}>Fecha de entrega</label>
-          <input type="date" value={fechaEntrega} onChange={e => setFechaEntrega(e.target.value)} style={{...inputStyle,fontSize:12.5}} />
+          <label style={{...labelStyle,color:y.primary}}>Días (hábiles)</label>
+          <input type="number" min={1} value={dias} onChange={e => setDias(e.target.value)} style={{...inputStyle,fontSize:12.5}} />
+        </div>
+        <div>
+          <label style={{...labelStyle,color:y.primary}}>Termina (calculado)</label>
+          <div style={{...inputStyle,fontSize:12.5,background:y.grayBg,color:y.text2,display:"flex",alignItems:"center"}}>
+            {fechaEntregaCalculada || "—"}
+          </div>
         </div>
       </div>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
         <div>
           <label style={{...labelStyle,color:y.primary}}>% de avance</label>
           <div style={{display:"flex",alignItems:"center",gap:8}}>
@@ -518,6 +638,10 @@ function TareaForm({ tarea, tareasProyecto, responsables, responsablesDisponible
             {TAREA_ESTADOS.map(s => <option key={s}>{s}</option>)}
           </select>
         </div>
+      </div>
+      <div style={{marginBottom:12}}>
+        <label style={{...labelStyle,color:y.primary}}>Observaciones</label>
+        <textarea value={observaciones} onChange={e => setObservaciones(e.target.value)} rows={2} placeholder="Notas sobre esta actividad..." style={{...inputStyle,fontSize:12.5,lineHeight:1.5,resize:"vertical"}} />
       </div>
 
       <div style={{display:"flex",justifyContent:"flex-end",gap:8}}>
@@ -534,6 +658,29 @@ function PlanAccionPanel({ proyecto, tareasProyecto, responsables, responsablesD
   const [tareaForm, setTareaForm] = useState(null); // null | {mode:"add"} | {mode:"edit", tarea}
 
   const avancePctTareas = tareasProyecto.length ? Math.round(tareasProyecto.reduce((s,t) => s + avanceTarea(t), 0) / tareasProyecto.length) : 0;
+
+  // Fecha de corte del resumen: siempre hoy. Días, % Plan y Desvío de cada tarea, calculados una
+  // sola vez aquí para usarlos tanto en la tabla como en el resumen y las exportaciones.
+  const hoy = fechaHoyISO();
+  const filas = tareasProyecto.map(t => {
+    const dias = diasHabilesTarea(t);
+    const planPct = avancePlanTarea(t, hoy);
+    const realPct = avanceTarea(t);
+    const desvio = planPct != null ? realPct - planPct : null;
+    return { t, dias, planPct, realPct, desvio };
+  });
+  const sumaDias = filas.reduce((s, f) => s + (f.dias || 0), 0);
+  const avanceRealPonderado = sumaDias > 0 ? Math.round(filas.reduce((s, f) => s + f.realPct * (f.dias || 0), 0) / sumaDias) : avancePctTareas;
+  const filasConPlan = filas.filter(f => f.planPct != null && f.dias);
+  const sumaDiasConPlan = filasConPlan.reduce((s, f) => s + f.dias, 0);
+  const avancePlanPonderado = sumaDiasConPlan > 0 ? Math.round(filasConPlan.reduce((s, f) => s + f.planPct * f.dias, 0) / sumaDiasConPlan) : null;
+  const desviacionGeneral = avancePlanPonderado != null ? avanceRealPonderado - avancePlanPonderado : null;
+
+  const ESTADOS_RESUMEN = ["Completada","En progreso","Atrasada","No iniciada"];
+  const ESTADO_RESUMEN_COLOR = { "Completada": TAREA_ESTADO_COLOR["Completada"], "En progreso": TAREA_ESTADO_COLOR["En proceso"], "Atrasada": TAREA_ESTADO_COLOR["Vencida"], "No iniciada": TAREA_ESTADO_COLOR["Pendiente"] };
+  const conteoEstados = { "Completada": 0, "En progreso": 0, "Atrasada": 0, "No iniciada": 0 };
+  filas.forEach(f => { const r = estatusResumen(f.t); if (conteoEstados[r] !== undefined) conteoEstados[r]++; });
+  const totalTareas = tareasProyecto.length;
 
   const guardarTarea = async (payload) => {
     setCargando(true);
@@ -598,14 +745,20 @@ function PlanAccionPanel({ proyecto, tareasProyecto, responsables, responsablesD
   const nombreArchivoBase = (proyecto.codigo || proyecto.nombre || "proyecto").toString().replace(/[^\w\-]+/g,"_").substring(0,40);
 
   const exportarPlanExcel = () => {
-    const filas = [
+    const filasExcel = [
       ["Proyecto", proyecto.nombre || ""],
       ["Código", proyecto.codigo || ""],
+      ["Fecha de corte", formatearFechaCorta(hoy)],
+      ["Avance real (ponderado por días)", avanceRealPonderado + "%"],
+      ["Avance planificado a la fecha", avancePlanPonderado != null ? avancePlanPonderado + "%" : ""],
       []
     ];
-    filas.push(["EDT","Tarea","Responsable","Inicio","Entrega","% Avance","Estatus"]);
-    tareasProyecto.forEach((t,i) => filas.push([i+1, t.titulo, t.responsable||"", t.fecha_inicio||"", t.fecha_entrega||"", avanceTarea(t), estatusEfectivoTarea(t)]));
-    const ws = XLSX.utils.aoa_to_sheet(filas);
+    filasExcel.push(["Actividad","Días","Responsable","Inicio","Terminado","% Avance","Estado","Observaciones","% Plan","Desvío"]);
+    filas.forEach(({ t, dias, planPct, realPct, desvio }) => filasExcel.push([
+      t.titulo, dias != null ? dias : "", t.responsable || "", t.fecha_inicio || "", t.fecha_entrega || "",
+      realPct, estatusEfectivoTarea(t), t.observaciones || "", planPct != null ? planPct : "", desvio != null ? desvio : ""
+    ]));
+    const ws = XLSX.utils.aoa_to_sheet(filasExcel);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Cronograma");
     XLSX.writeFile(wb, "Cronograma_" + nombreArchivoBase + ".xlsx");
@@ -617,15 +770,25 @@ function PlanAccionPanel({ proyecto, tareasProyecto, responsables, responsablesD
     doc.text(proyecto.nombre || "Plan de acción", 14, 15);
     doc.setFontSize(9);
     doc.setTextColor(120);
-    doc.text("Generado el " + new Date().toLocaleDateString("es-HN") + " · " + tareasProyecto.length + " tarea(s) · Avance general " + avancePctTareas + "%", 14, 21);
-    const filas = tareasProyecto.map((t,i) => [i+1, t.titulo, t.responsable||"", t.fecha_inicio||"", t.fecha_entrega||"", avanceTarea(t)+"%", estatusEfectivoTarea(t)]);
+    doc.text(
+      "Generado el " + new Date().toLocaleDateString("es-HN") + " · Fecha de corte " + formatearFechaCorta(hoy) +
+      " · Avance real (ponderado) " + avanceRealPonderado + "%" +
+      (avancePlanPonderado != null ? " · Avance planificado " + avancePlanPonderado + "%" : ""),
+      14, 21
+    );
+    const filasPdf = filas.map(({ t, dias, planPct, realPct, desvio }) => [
+      t.titulo, dias != null ? dias : "—", t.responsable || "", t.fecha_inicio || "", t.fecha_entrega || "",
+      realPct + "%", estatusEfectivoTarea(t), t.observaciones || "", planPct != null ? planPct + "%" : "—",
+      desvio != null ? (desvio > 0 ? "+" : "") + desvio + "%" : "—"
+    ]);
     doc.autoTable({
-      head: [["EDT","Tarea","Responsable","Inicio","Entrega","Avance","Estatus"]],
-      body: filas,
+      head: [["Actividad","Días","Responsable","Inicio","Terminado","Avance","Estado","Observaciones","% Plan","Desvío"]],
+      body: filasPdf,
       startY: 26,
-      styles: { fontSize: 8, cellPadding: 2 },
+      styles: { fontSize: 7.5, cellPadding: 2 },
       headStyles: { fillColor: [30, 77, 183] },
-      margin: { left: 14, right: 14 }
+      margin: { left: 14, right: 14 },
+      columnStyles: { 7: { cellWidth: 55 } }
     });
     doc.save("Plan_" + nombreArchivoBase + ".pdf");
   };
@@ -669,63 +832,98 @@ function PlanAccionPanel({ proyecto, tareasProyecto, responsables, responsablesD
         {tareasProyecto.length === 0 ? (
           <div style={{fontSize:12,color:y.text3,padding:"1rem 0"}}>Sin tareas todavía{puedeEditar ? " — agrega la primera con el botón de arriba." : "."}</div>
         ) : (
-          <React.Fragment>
-          <div style={{overflowX:"auto"}}>
-            <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
-              <thead>
-                <tr style={{background:y.grayBg}}>
-                  {["EDT","Tarea","Responsable","Depende de","Inicio","Entrega","Días","% Avance","Estatus",""].map(h => (
-                    <th key={h} style={{textAlign:"left",fontSize:10,fontWeight:800,color:y.text3,textTransform:"uppercase",letterSpacing:.3,padding:"0.5rem 0.5rem",borderBottom:"1px solid "+y.border,whiteSpace:"nowrap"}}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {tareasProyecto.map((t, i) => {
-                  const est = estatusEfectivoTarea(t);
-                  const [estBg, estColor] = TAREA_ESTADO_COLOR[est] || [y.grayBg, y.gray];
-                  const dias = duracionDias(t.fecha_inicio, t.fecha_entrega);
-                  const dep = t.depende_id ? tareasProyecto.findIndex(x => x.id === t.depende_id) : -1;
-                  const pct = avanceTarea(t);
-                  return (
-                    <tr key={t.id} style={{borderBottom:"1px solid "+y.grayBg}}>
-                      <td style={{padding:"0.5rem",fontWeight:800,color:y.text3,fontSize:11}}>{i+1}</td>
-                      <td style={{padding:"0.5rem",color:y.text,maxWidth:220}}>{t.titulo}</td>
-                      <td style={{padding:"0.5rem",color:y.text2,whiteSpace:"nowrap"}}>{t.responsable || "—"}</td>
-                      <td style={{padding:"0.5rem",color:y.text3,whiteSpace:"nowrap"}}>{dep >= 0 ? "EDT " + (dep+1) : "—"}</td>
-                      <td style={{padding:"0.5rem",color:y.text2,whiteSpace:"nowrap"}}>{t.fecha_inicio || "—"}</td>
-                      <td style={{padding:"0.5rem",color:y.text2,whiteSpace:"nowrap"}}>{t.fecha_entrega || "—"}</td>
-                      <td style={{padding:"0.5rem",color:y.text2}}>{dias!=null ? dias : "—"}</td>
-                      <td style={{padding:"0.5rem",whiteSpace:"nowrap"}}>
-                        <span style={{display:"inline-block",width:44,height:6,borderRadius:20,background:y.border,position:"relative",marginRight:6,verticalAlign:"middle"}}>
-                          <span style={{position:"absolute",left:0,top:0,bottom:0,borderRadius:20,background:y.primary,width:pct+"%"}}/>
-                        </span>
-                        {pct}%
-                      </td>
-                      <td style={{padding:"0.5rem"}}>
-                        <span style={{display:"inline-flex",padding:"3px 9px",borderRadius:20,fontSize:10.5,fontWeight:700,background:estBg,color:estColor,whiteSpace:"nowrap"}}>{est}</span>
-                      </td>
-                      <td style={{padding:"0.5rem",textAlign:"right",whiteSpace:"nowrap"}}>
-                        {puedeEditar && (
-                          <React.Fragment>
-                            <button onClick={() => setTareaForm({mode:"edit", tarea:t})} style={{background:"none",border:"none",color:y.text3,cursor:"pointer",padding:3}} title="Editar"><i className="ti ti-pencil" style={{fontSize:13}}/></button>
-                            <button onClick={() => eliminarTarea(t)} style={{background:"none",border:"none",color:y.text3,cursor:"pointer",padding:3}} title="Eliminar"><i className="ti ti-trash" style={{fontSize:13}}/></button>
-                          </React.Fragment>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-          </React.Fragment>
-        )}
+          <div style={{display:"flex",gap:16,flexWrap:"wrap",alignItems:"flex-start"}}>
+            <div style={{flex:"3 1 560px",minWidth:0,overflowX:"auto"}}>
+              <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+                <thead>
+                  <tr style={{background:y.grayBg}}>
+                    {["Actividad","Días","Responsable","Inicio","Terminado","% Avance","Estado","Observaciones","% Plan","Desvío",""].map(h => (
+                      <th key={h} style={{textAlign:"left",fontSize:10,fontWeight:800,color:y.text3,textTransform:"uppercase",letterSpacing:.3,padding:"0.5rem 0.5rem",borderBottom:"1px solid "+y.border,whiteSpace:"nowrap"}}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filas.map(({ t, dias, planPct, realPct, desvio }) => {
+                    const est = estatusEfectivoTarea(t);
+                    const [estBg, estColor] = TAREA_ESTADO_COLOR[est] || [y.grayBg, y.gray];
+                    return (
+                      <tr key={t.id} style={{borderBottom:"1px solid "+y.grayBg}}>
+                        <td style={{padding:"0.5rem",color:y.text,fontWeight:600,maxWidth:220}}>{t.titulo}</td>
+                        <td style={{padding:"0.5rem",color:y.text2}}>{dias != null ? dias : "—"}</td>
+                        <td style={{padding:"0.5rem",color:y.text2,whiteSpace:"nowrap"}}>{t.responsable || "—"}</td>
+                        <td style={{padding:"0.5rem",color:y.text2,whiteSpace:"nowrap"}}>{t.fecha_inicio || "—"}</td>
+                        <td style={{padding:"0.5rem",color:y.text2,whiteSpace:"nowrap"}}>{t.fecha_entrega || "—"}</td>
+                        <td style={{padding:"0.5rem",whiteSpace:"nowrap"}}>
+                          <span style={{display:"inline-block",width:44,height:6,borderRadius:20,background:y.border,position:"relative",marginRight:6,verticalAlign:"middle"}}>
+                            <span style={{position:"absolute",left:0,top:0,bottom:0,borderRadius:20,background:y.success,width:realPct+"%"}}/>
+                          </span>
+                          {realPct}%
+                        </td>
+                        <td style={{padding:"0.5rem"}}>
+                          <span style={{display:"inline-flex",padding:"3px 9px",borderRadius:20,fontSize:10.5,fontWeight:700,background:estBg,color:estColor,whiteSpace:"nowrap"}}>{est}</span>
+                        </td>
+                        <td style={{padding:"0.5rem",color:y.text3,maxWidth:200}}>{t.observaciones || "—"}</td>
+                        <td style={{padding:"0.5rem",color:y.text2}}>{planPct != null ? planPct + "%" : "—"}</td>
+                        <td style={{padding:"0.5rem",fontWeight:700,color: desvio == null ? y.text3 : desvio < 0 ? y.danger : desvio > 0 ? y.success : y.text2,whiteSpace:"nowrap"}}>
+                          {desvio != null ? (desvio > 0 ? "+" : "") + desvio + "%" : "—"}
+                        </td>
+                        <td style={{padding:"0.5rem",textAlign:"right",whiteSpace:"nowrap"}}>
+                          {puedeEditar && (
+                            <React.Fragment>
+                              <button onClick={() => setTareaForm({mode:"edit", tarea:t})} style={{background:"none",border:"none",color:y.text3,cursor:"pointer",padding:3}} title="Editar"><i className="ti ti-pencil" style={{fontSize:13}}/></button>
+                              <button onClick={() => eliminarTarea(t)} style={{background:"none",border:"none",color:y.text3,cursor:"pointer",padding:3}} title="Eliminar"><i className="ti ti-trash" style={{fontSize:13}}/></button>
+                            </React.Fragment>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
 
-        {tareasProyecto.length > 0 && (
-          <div style={{background:y.primaryLight,borderRadius:10,padding:"0.75rem 1rem",marginTop:14,display:"flex",alignItems:"center",gap:12,fontSize:12.5,color:y.text2}}>
-            <i className="ti ti-chart-bar" style={{color:y.primary}}/>
-            Avance general del proyecto (promedio de {tareasProyecto.length} {tareasProyecto.length===1?"tarea":"tareas"}):
-            <strong style={{color:y.primary}}>{avancePctTareas}%</strong>
+            <div style={{flex:"1 1 260px",maxWidth:320,display:"flex",flexDirection:"column",gap:12}}>
+              <div style={{border:"1px solid "+y.border,borderRadius:10,overflow:"hidden"}}>
+                <div style={{background:y.primary,color:"#fff",padding:"0.55rem 0.9rem",fontSize:11,fontWeight:800,textTransform:"uppercase",letterSpacing:.3}}>Resumen de avance</div>
+                <div style={{padding:"0.75rem 0.9rem",display:"flex",flexDirection:"column",gap:8}}>
+                  {[
+                    ["Fecha de corte", formatearFechaCorta(hoy)],
+                    ["Avance real (ponderado por días)", avanceRealPonderado + "%"],
+                    ["Avance planificado a la fecha", avancePlanPonderado != null ? avancePlanPonderado + "%" : "—"],
+                    ["Desviación (real - plan)", desviacionGeneral != null ? (desviacionGeneral > 0 ? "+" : "") + desviacionGeneral + "%" : "—"],
+                    ["Avance simple (promedio)", avancePctTareas + "%"]
+                  ].map(([label, valor]) => (
+                    <div key={label} style={{display:"flex",justifyContent:"space-between",gap:10,fontSize:11.5}}>
+                      <span style={{color:y.text3}}>{label}</span>
+                      <strong style={{color:y.text,whiteSpace:"nowrap"}}>{valor}</strong>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{border:"1px solid "+y.border,borderRadius:10,overflow:"hidden"}}>
+                <div style={{background:y.grayBg,color:y.text2,padding:"0.55rem 0.9rem",fontSize:11,fontWeight:800,textTransform:"uppercase",letterSpacing:.3}}>Actividades por estado</div>
+                <div style={{padding:"0.75rem 0.9rem",display:"flex",flexDirection:"column",gap:7}}>
+                  {ESTADOS_RESUMEN.map(estado => {
+                    const [, color] = ESTADO_RESUMEN_COLOR[estado] || [y.grayBg, y.gray];
+                    const cant = conteoEstados[estado];
+                    const pct = totalTareas ? Math.round((cant / totalTareas) * 100) : 0;
+                    return (
+                      <div key={estado} style={{display:"flex",alignItems:"center",justifyContent:"space-between",fontSize:11.5}}>
+                        <span style={{display:"flex",alignItems:"center",gap:6,color:y.text2}}>
+                          <span style={{width:8,height:8,borderRadius:20,background:color,flexShrink:0}}/>
+                          {estado}
+                        </span>
+                        <span style={{color:y.text3,whiteSpace:"nowrap"}}>{cant} ({pct}%)</span>
+                      </div>
+                    );
+                  })}
+                  <div style={{borderTop:"1px solid "+y.border,marginTop:2,paddingTop:7,display:"flex",justifyContent:"space-between",fontSize:11.5,fontWeight:800,color:y.text}}>
+                    <span>Total</span><span>{totalTareas}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         )}
       </div>
@@ -770,10 +968,12 @@ function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, respon
       titulo: t.titulo,
       responsable: t.responsable,
       fecha_inicio: t.fecha_inicio,
+      dias: t.dias,
       fecha_entrega: t.fecha_entrega,
       porcentaje_avance: t.porcentaje_avance,
       estatus: t.estatus,
       completada: t.completada,
+      observaciones: t.observaciones,
       depende_id: null
     }));
     // Resolver dependencias EDT -> id local, entre tareas del mismo archivo importado.
@@ -1147,7 +1347,7 @@ function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, respon
                               <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
                                 <thead>
                                   <tr>
-                                    {["Tarea","Responsable","Inicio","Entrega","% Avance","Estatus",""].map(h => (
+                                    {["Tarea","Días","Responsable","Inicio","Entrega","% Avance","Estatus",""].map(h => (
                                       <th key={h} style={{textAlign:"left",fontSize:10,fontWeight:800,color:y.text3,textTransform:"uppercase",letterSpacing:.3,padding:"0.5rem 0.5rem",borderBottom:"1px solid "+y.border,whiteSpace:"nowrap",background:y.surface}}>{h}</th>
                                     ))}
                                   </tr>
@@ -1159,6 +1359,7 @@ function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, respon
                                     return (
                                       <tr key={t.id} style={{borderBottom:"1px solid "+y.border}}>
                                         <td style={{padding:"0.5rem",color:y.text,maxWidth:220,background:y.surface}}>{t.titulo}</td>
+                                        <td style={{padding:"0.5rem",color:y.text2,background:y.surface}}>{diasHabilesTarea(t) != null ? diasHabilesTarea(t) : "—"}</td>
                                         <td style={{padding:"0.5rem",color:y.text2,whiteSpace:"nowrap",background:y.surface}}>{t.responsable || "—"}</td>
                                         <td style={{padding:"0.5rem",color:y.text2,whiteSpace:"nowrap",background:y.surface}}>{t.fecha_inicio || "—"}</td>
                                         <td style={{padding:"0.5rem",color:y.text2,whiteSpace:"nowrap",background:y.surface}}>{t.fecha_entrega || "—"}</td>

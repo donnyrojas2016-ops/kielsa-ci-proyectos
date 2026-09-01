@@ -48,7 +48,7 @@ Si más adelante se quiere cerrar el hueco de verdad (no solo silenciar el aviso
 - Agregar proyectos (uno o varios a la vez, una tarjeta por proyecto con sus datos en una lista de Campo / Valor).
 - Editar y eliminar proyectos.
 - Botón "Editar" con Datos del proyecto (misma lista de Campo / Valor, más el Plan de acción) y Comentarios — ver sección "Nuevo formulario de proyecto (lista de Campo / Valor)" más abajo.
-- Plan de acción por proyecto (debajo de la tabla, al seleccionarlo): tabla de tareas con EDT, responsable, dependencia, fechas, % de avance y estatus, más exportar ese plan a Excel y a PDF — ver sección "Tabla de proyectos y Plan de acción".
+- Plan de acción por proyecto (debajo de la tabla, al seleccionarlo), con formato tipo Excel: tabla de actividades con días hábiles, responsable, fechas, % de avance, estado, observaciones, % planificado y desvío, más un resumen de avance y de actividades por estado, y exportar ese plan a Excel y a PDF — ver sección "Tabla de proyectos y Plan de acción".
 - Exportar a Excel y a PDF la lista completa de proyectos (botones junto a los filtros).
 
 ## Activar los comentarios (una sola vez en Supabase)
@@ -168,20 +168,22 @@ Y al **editar** un proyecto ya existente, debajo de su lista de datos aparece la
 
 ## Tabla de proyectos y Plan de acción
 
-Por pedido tuyo, la pantalla de Proyectos se simplificó: ya no hay vistas de Tarjetas ni Kanban, solo la tabla. Al hacer clic en cualquier fila de la tabla, justo debajo de esa misma fila se despliega una tarjeta nueva, **"Plan de acción — [nombre del proyecto]"**, con la tabla de tareas de ese proyecto (EDT, tarea, responsable, de qué depende, fechas, días, % de avance, estatus) y botones para agregar, editar y eliminar (según tu rol). Hacer clic en la misma fila otra vez, o en el botón "Cerrar" del panel, lo oculta. Seleccionar otro proyecto cambia el panel para mostrar el plan de ese proyecto.
+La pantalla de Proyectos tiene solo la tabla (sin vistas de Tarjetas ni Kanban). Al hacer clic en cualquier fila, justo debajo se despliega una tarjeta nueva, **"Plan de acción — [nombre del proyecto]"**. Hacer clic en la misma fila otra vez, o en el botón "Cerrar" del panel, lo oculta. Seleccionar otro proyecto cambia el panel para mostrar el plan de ese proyecto.
 
-Esta misma tarjeta de Plan de acción (tabla de tareas y exportaciones) también aparece **dentro del formulario "Editar proyecto"**, al final de la pestaña "Datos del proyecto" — así puedes gestionar el plan de acción sin salir del formulario de edición. Ahí no tiene botón "Cerrar" (siempre está visible mientras edites ese proyecto).
+Esta misma tarjeta también aparece **dentro del formulario "Editar proyecto"**, al final de la pestaña "Datos del proyecto" — así puedes gestionar el plan de acción sin salir del formulario de edición. Ahí no tiene botón "Cerrar" (siempre está visible mientras edites ese proyecto).
 
-Dentro del Plan de acción hay dos botones de exportación propios de ese proyecto:
+### Plan de acción con formato tipo Excel (reemplaza la tabla anterior)
 
-- **Excel** — descarga un archivo con el nombre del proyecto y su cronograma completo (EDT, tarea, responsable, fechas, % de avance, estatus).
-- **PDF** — genera un informe en PDF del plan de acción, con la misma tabla de tareas y el avance general del proyecto.
+Me mandaste tu propio Excel de "Cronograma de proyectos" (tabla + panel de Resumen de avance a la derecha) y pediste que el Plan de acción de cada proyecto se viera así. El Plan de acción quedó rediseñado por completo:
 
-Estos son aparte de los botones de Excel/PDF que ya existían junto a los filtros, que siguen exportando la **lista completa de proyectos** (no el plan de uno solo).
+- **Tabla de actividades** — Actividad, Días, Responsable, Inicio, Terminado, % Avance (con barra), Estado, Observaciones, % Plan y Desvío. Ya no se muestran las columnas EDT ni "Depende de" (esa dependencia se sigue guardando y usando internamente — por ejemplo en la carga masiva — solo que ya no ocupa una columna en pantalla).
+- **Días (hábiles)** — al agregar o editar una tarea, ya no escribes la fecha de entrega directamente: escribes la **Fecha de inicio** y los **Días (hábiles)** que va a tomar, y la fecha de término se calcula sola contando solo de lunes a viernes (sin excluir festivos, porque tus proyectos son de varios países y cada uno tiene su propio calendario). El formulario te muestra la fecha calculada ("Termina") antes de guardar. Las tareas que ya tenías (creadas antes de este cambio, con fecha de inicio y de entrega pero sin "Días") lo siguen mostrando igual: los Días se calculan solos a partir de esas dos fechas.
+- **Observaciones** — campo de texto libre nuevo por tarea, para anotar cualquier cosa (igual que en tu Excel).
+- **% Plan y Desvío** — el "% Plan" es el avance que la tarea debería tener a la fecha de hoy, calculado a partir de su fecha de inicio y sus Días (si ya pasó su fecha de término, el plan es 100%; si todavía no empieza, es 0%). El "Desvío" es el avance real menos el % Plan — en rojo si vas atrasado, en verde si vas adelantado.
+- **Resumen de avance** (panel a la derecha) — Fecha de corte (siempre hoy), Avance real ponderado por días (el promedio de avance de las tareas, pero pesando más las que duran más días), Avance planificado a la fecha (el mismo promedio ponderado pero con el % Plan de cada tarea), Desviación (real menos plan) y Avance simple (el promedio de siempre, sin ponderar — es el mismo número que ya se usaba antes para el % de avance del proyecto en la tabla de Proyectos).
+- **Actividades por estado** (panel a la derecha, debajo del anterior) — cuántas tareas hay en cada estado y su porcentaje: Completada, En progreso, Atrasada (antes "Vencida") y No iniciada (antes "Pendiente"). Es solo cómo se llaman en este resumen; en el resto de la app y en la base de datos se siguen guardando igual que siempre.
 
-### Línea de tiempo (Gantt) y ruta crítica (quitados)
-
-Habíamos agregado, arriba de la tabla de tareas del Plan de acción, una línea de tiempo visual (Gantt) con las tareas como barras horizontales, y el cálculo automático de la **ruta crítica** (que resaltaba en rojo la cadena de tareas que determina la fecha de fin del proyecto). Por pedido tuyo quité ambas cosas — el Plan de acción ahora es **puramente una tabla** de tareas, sin gráfico ni resaltado de ruta crítica (que además podía confundir con proyectos de una sola tarea, marcándola como "crítica" sin que tuviera sentido). Las columnas EDT, Tarea, Responsable, Depende de, Inicio, Entrega, Días, % Avance y Estatus se quedan igual que antes, solo sin el Gantt encima.
+Los botones **Excel** y **PDF** del Plan de acción exportan ahora las mismas columnas de la tabla nueva (incluidos % Plan, Desvío y Observaciones), más la Fecha de corte y el Avance real/planificado en el encabezado del archivo.
 
 **Sobre el campo "Archivo / documento":** por ahora es un campo de texto (para poner el nombre del archivo o un enlace, por ejemplo a un Drive o SharePoint), no una carga de archivo real. Lo hice así para no meter la complejidad de subir y guardar archivos (que en Supabase requiere configurar un "bucket" de almacenamiento con sus propios permisos, y ya tuvimos bastante trabajo ajustando permisos con las otras tablas). Si más adelante quieres que sea una carga de archivo de verdad, lo hacemos como una tarea aparte.
 
@@ -208,19 +210,32 @@ alter table proyecto_tareas add column if not exists depende_id bigint;
 
 3. Listo. En cuanto subas el `index.html` de este paquete, el formulario de proyecto ya se ve con las secciones nuevas y el Plan de acción (debajo de la tabla, al seleccionar un proyecto) ya puede guardar tareas con responsable, fechas, dependencia, % de avance y estatus.
 
+### Activar Días y Observaciones del Plan de acción tipo Excel (una sola vez en Supabase)
+
+Para el nuevo formato tipo Excel (Días hábiles y Observaciones por tarea), agrega estas dos columnas a `proyecto_tareas` de la misma forma que las anteriores — entra a supabase.com → tu proyecto → **SQL Editor** → **New query**, pega y ejecuta:
+
+```sql
+alter table proyecto_tareas add column if not exists dias integer;
+alter table proyecto_tareas add column if not exists observaciones text;
+```
+
+No borra ni afecta ninguna tarea existente. En cuanto subas el `index.html` de este paquete, ya puedes guardar Días y Observaciones en cada tarea.
+
 ## Carga masiva de planes de trabajo desde Excel
 
 Tanto en **"Plan de trabajo (opcional)"** (al agregar un proyecto nuevo) como en **"Plan de acción"** (al editar uno existente) hay dos botones nuevos junto a "Agregar tarea":
 
-- **Plantilla** — descarga un Excel de ejemplo (`Plantilla_plan_de_trabajo.xlsx`) con las columnas esperadas: `EDT`, `Tarea`, `Responsable`, `Inicio`, `Entrega`, `% Avance`, `Estatus`, `Depende de (EDT)`, y dos filas de ejemplo (la segunda depende de la primera) para que quede claro cómo llenarlo.
+- **Plantilla** — descarga un Excel de ejemplo (`Plantilla_plan_de_trabajo.xlsx`) con las columnas esperadas: `EDT`, `Tarea`, `Responsable`, `Inicio`, `Días (hábiles)`, `% Avance`, `Estatus`, `Observaciones`, `Depende de (EDT)`, y dos filas de ejemplo (la segunda depende de la primera) para que quede claro cómo llenarlo.
 - **Carga masiva** — abre el explorador de archivos para elegir un `.xlsx`/`.xls` ya lleno; en cuanto lo eliges, todas las tareas del archivo se agregan de una sola vez al plan de trabajo.
 
 Cómo se interpreta el archivo:
 
 - Solo hace falta la columna **Tarea** (el nombre) — las filas sin nombre de tarea se ignoran. El resto de columnas son opcionales.
-- Las fechas de **Inicio** y **Entrega** aceptan celdas de fecha de Excel, o texto en formato `AAAA-MM-DD` o `DD/MM/AAAA`.
+- Las fechas de **Inicio** y **Entrega/Terminado** aceptan celdas de fecha de Excel, o texto en formato `AAAA-MM-DD` o `DD/MM/AAAA`.
+- Si el archivo trae una fecha de **Entrega/Terminado** directa, se usa esa fecha tal cual (y los Días se calculan solos a partir de las dos fechas, si no vinieron ya). Si en cambio trae **Días (hábiles)** pero no una fecha de entrega, la fecha de término se calcula sola en días hábiles a partir del Inicio — igual que al escribir una tarea a mano.
 - **% Avance** se ajusta entre 0 y 100; si no viene o no es un número, queda en 0.
-- **Estatus** acepta "Pendiente", "En proceso" o "Completada" (sin distinguir mayúsculas); si viene vacío o con otro texto, se calcula solo a partir del % de avance.
+- **Estatus** acepta "Pendiente", "En proceso" o "Completada" (sin distinguir mayúsculas); si viene vacío o con otro texto (por ejemplo "Sin Iniciar" o "No iniciada"), se calcula solo a partir del % de avance.
+- **Observaciones** se guarda tal cual, si la columna existe en el archivo.
 - **Depende de (EDT)** es el número de la columna **EDT** de otra fila del mismo archivo — así puedes cargar de una vez una cadena de tareas ya encadenadas (por ejemplo, la tarea con EDT 2 puede depender de la EDT 1). Los nombres de columnas se reconocen sin importar mayúsculas, acentos ni espacios, así que también funcionan variantes como "Fecha de entrega" o "Depende de EDT".
 - Si el archivo no tiene una columna EDT, se usa el número de fila como EDT automáticamente.
 - El encabezado (la fila con los nombres de columna) puede estar en cualquier parte del archivo, no necesariamente en la primera fila — el importador busca la primera fila que tenga una columna "Tarea" y usa esa como encabezado. Así funciona igual con la Plantilla, con un archivo exportado con el botón "Excel" del Plan de acción (que trae "Proyecto" y "Código" arriba), o con tu propio cronograma en Excel.
@@ -336,3 +351,5 @@ Con el nuevo "Plan de trabajo (opcional)" al agregar un proyecto probé, con cap
 **Corrección reportada en producción (27 de agosto de 2026):** intentaste importar tu plan de trabajo real (un cronograma de ~90 tareas, con el mismo formato que descarga el botón "Excel" del Plan de acción) y salió el aviso "No se encontraron tareas en el archivo". La causa: ese formato trae dos filas de título arriba de la tabla ("Proyecto" y "Código") y una fila en blanco antes del encabezado real, y el importador solo sabía leer el encabezado si estaba en la primera fila del archivo — como no lo estaba, no reconocía ninguna columna. Corregí el importador para que **busque el encabezado en cualquier fila** (la primera que tenga una columna reconocible como "Tarea"), en vez de asumir que siempre está en la fila 1 — así funciona tanto con la Plantilla como con un archivo exportado desde la propia app, o con cualquier otro formato de tabla que tengas. También se reconocen ahora estatus como "Sin Iniciar" (se traduce a "Pendiente", ya que la app no maneja ese estatus como tal) sin marcar error. Probé, con un archivo que reproduce exactamente ese formato (título + fila en blanco + encabezado + tareas, incluyendo tareas "de grupo" sin fechas ni responsable): que ya no salga el aviso de "no se encontraron tareas"; que las tareas se importen con su nombre, fechas y estatus correctos; y que el resto de la carga masiva (la del formato de la Plantilla, sin filas de título) siga funcionando exactamente igual que antes. Todo sin errores de consola.
 
 **Renumerar el Código de los proyectos (27 de agosto de 2026):** me mandaste una captura donde el "Cód." de la tabla salía con huecos (5, 6, 7, 8, 9, 14, 17...) por los proyectos que habías eliminado, y pediste que el número se autogenerara de forma correlativa. Como el campo "Código" también se usa como texto libre en algunos proyectos (no siempre es un número), en vez de automatizarlo por completo agregué un botón **"Renumerar"** junto a Excel/PDF en la pantalla de Proyectos, que — con tu confirmación — le pone 1, 2, 3... a todos los proyectos según su orden de creación, de una sola vez, cuantas veces quieras usarlo. Probé, con un navegador automatizado: que el botón aparezca junto a Excel y PDF (solo para Administrador/Editor); que al hacer clic pida confirmación explicando que va a afectar a todos los proyectos; y que, tras confirmar, la columna "Cód." de la tabla quede en 1, 2, 3... en el mismo orden en que ya se mostraban los proyectos, sin huecos. Todo sin errores de consola.
+
+**Plan de acción con formato tipo Excel (1 de septiembre de 2026):** me mandaste tu Excel de "Cronograma de proyectos" (tabla + panel de Resumen de avance) y pediste que el Plan de acción de cada proyecto se viera así. Antes de tocar código aclaramos tres cosas: reemplazar la tabla actual (no dejarla como vista alterna), que la Fecha de corte del resumen fuera siempre la de hoy (no un campo editable), y que "Días" pasara a ser un dato que tú escribes (en días hábiles, lunes a viernes, sin festivos porque los proyectos son de varios países) en vez de calcularse de las dos fechas. Con eso implementé el rediseño completo: la tabla de tareas cambió a Actividad/Días/Responsable/Inicio/Terminado/% Avance/Estado/Observaciones/% Plan/Desvío (ya sin las columnas EDT y "Depende de", aunque esa dependencia se sigue usando internamente); el formulario de tarea cambió "Fecha de entrega" por "Días (hábiles)" con la fecha de término calculada sola y mostrada como vista previa antes de guardar; agregué el campo "Observaciones" por tarea; y agregué el panel de la derecha con "Resumen de avance" (avance real ponderado por días, avance planificado a la fecha, desviación y avance simple) y "Actividades por estado" (Completada/En progreso/Atrasada/No iniciada con cantidad y %). Las exportaciones a Excel y PDF del Plan de acción se actualizaron con las mismas columnas nuevas. Probé, con un navegador automatizado y capturas de pantalla: que el Plan de acción de un proyecto con tareas existentes (sin el campo "Días" guardado) muestre los Días calculados solos a partir de sus fechas, y que el resumen calcule bien el avance ponderado, el planificado y la desviación (verificado a mano con los números de cada tarea); que agregar una tarea nueva con fecha de inicio un martes y 5 días hábiles calcule "Termina" el lunes siguiente (saltándose el fin de semana), y que se guarde con esa fecha, sus Días y su Observación; que el conteo de "Actividades por estado" sea correcto; y que el Plan de trabajo de un proyecto nuevo (antes de guardarlo) también muestre la columna Días. Todo sin errores de consola.
