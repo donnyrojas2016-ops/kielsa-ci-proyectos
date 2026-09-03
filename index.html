@@ -1183,7 +1183,10 @@ function PlanAccionPanel({ proyecto, tareasProyecto, responsables, responsablesD
   );
 }
 
-function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, responsables, responsablesDisponibles, editProject, tareasProyecto = [], onTareasChanged, puedeEditar = true, onClose, onSaved, tablaProyectos = "proyectos", tablaTareas = "proyecto_tareas", tablaComentarios = "proyecto_comentarios" }) {
+function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, categoriasCatalogo, categoriasDisponibles, responsables, responsablesDisponibles, editProject, tareasProyecto = [], onTareasChanged, puedeEditar = true, onClose, onSaved, tablaProyectos = "proyectos", tablaTareas = "proyecto_tareas", tablaComentarios = "proyecto_comentarios" }) {
+  // Igual que Área: si el catálogo de Categorías está activado y tiene datos, se usa ese;
+  // si no, se usa la lista fija de siempre — así el formulario nunca se queda sin opciones.
+  const categoriasEfectivas = (categoriasDisponibles && categoriasCatalogo && categoriasCatalogo.length > 0) ? categoriasCatalogo.map(c => c.nombre) : CATEGORIAS;
   const [drafts, setDrafts] = useState(() => editProject ? [{ ...editProject }] : [nuevoProyecto()]);
   const [saving, setSaving] = useState(false);
   const [tab, setTab] = useState("datos"); // datos | comentarios (solo aplica en modo edición)
