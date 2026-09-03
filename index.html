@@ -2587,9 +2587,9 @@ function EvaluacionFinancieraPanel({ proyecto, evaluacion, paisTexto, puedeEdita
               <ExcBarraLabel bg={EXC.purple}>  💼  SUPUESTOS BASE DEL PROYECTO  (ingresa los valores del Año 1)</ExcBarraLabel>
               <ExcFilaEncabezado bg={EXC.purple} cols={["Concepto", "AÑO 1 (base)", "AÑO 2 (proyectado)", "AÑO 3 (proyectado)", "TOTAL 3 AÑOS"]} />
               <ExcBarraLabel bg={EXC.blue} size={10.5}>INGRESOS</ExcBarraLabel>
-              <FilaSupuesto label="Ventas / Ingresos directos del proyecto" k="ventas_ano1" tipo="num" val2={calc.ingresos[1]} val3={calc.ingresos[2]} total={calc.ingresosTotal3} fmt={formatearMonedaEval} />
-              <FilaSupuesto label="Ahorros operativos / eficiencias generadas" k="ahorros_ano1" tipo="num" val2={calc.ahorros[1]} val3={calc.ahorros[2]} total={ahorrosTotal3} fmt={formatearMonedaEval} />
-              <FilaEstado label="  TOTAL INGRESOS" vals={[calc.ingresos[0], calc.ingresos[1], calc.ingresos[2]]} total={calc.ingresosTotal3} fmt={formatearMonedaEval} labelBg={EXC.green} labelColor={EXC.white} cellBg={EXC.greenLight} cellColor={EXC.green} bold totalBg={EXC.totalBg} totalColor={EXC.green} />
+              {FilaSupuesto({label: "Ventas / Ingresos directos del proyecto", k: "ventas_ano1", tipo: "num", val2: (calc.ingresos[1]), val3: (calc.ingresos[2]), total: (calc.ingresosTotal3), fmt: (formatearMonedaEval)})}
+              {FilaSupuesto({label: "Ahorros operativos / eficiencias generadas", k: "ahorros_ano1", tipo: "num", val2: (calc.ahorros[1]), val3: (calc.ahorros[2]), total: (ahorrosTotal3), fmt: (formatearMonedaEval)})}
+              {FilaEstado({label: "  TOTAL INGRESOS", vals: ([calc.ingresos[0], calc.ingresos[1], calc.ingresos[2]]), total: (calc.ingresosTotal3), fmt: (formatearMonedaEval), labelBg: (EXC.green), labelColor: (EXC.white), cellBg: (EXC.greenLight), cellColor: (EXC.green), bold: true, totalBg: (EXC.totalBg), totalColor: (EXC.green)})}
               <tr>
                 <ExcCelda bg={EXC.yellowBg} color={EXC.navy} bold>% Costo de Ventas sobre Ingresos (COGS %)</ExcCelda>
                 <ExcInput value={campos.pct_cogs} onChange={e => set("pct_cogs", e.target.value)} disabled={!puedeEditar} suffix="%" align="right" size={13} />
@@ -2598,12 +2598,12 @@ function EvaluacionFinancieraPanel({ proyecto, evaluacion, paisTexto, puedeEdita
                 <ExcCelda bg={EXC.yellowBg} color={EXC.tip} size={9}>💡 Ingresa el % y el Costo de Ventas se calcula sobre las Ventas/Ingresos de cada año. Retail/Farma típico: 55% – 75%</ExcCelda>
               </tr>
               <ExcBarraLabel bg={EXC.red} size={10.5}>GASTOS Y COSTOS</ExcBarraLabel>
-              <FilaGasto label="Costo de ventas / COGS (insumos, mercadería)" editable={false} val1={calc.cogs[0]} val2={calc.cogs[1]} val3={calc.cogs[2]} total={calc.cogsTotal3} />
-              <FilaGasto label="Gastos operativos (personal, alquiler, utilities)" k="gastos_operativos_ano1" val2={calc.opex[1]} val3={calc.opex[2]} total={opexTotal3} />
-              <FilaGasto label="Licencias, software, cloud, suscripciones" k="licencias_ano1" val2={calc.lic[1]} val3={calc.lic[2]} total={licTotal3} />
-              <FilaGasto label="Gastos de desarrollo (TI)" labelColor={EXC.red} k="gastos_desarrollo_ano1" val2={calc.dev[1]} val3={calc.dev[2]} total={devTotal3} />
-              <FilaGasto label="Otros gastos / contingencia" k="otros_gastos_ano1" val2={calc.otros[1]} val3={calc.otros[2]} total={otrosTotal3} />
-              <FilaEstado label="  TOTAL GASTOS" vals={calc.gastosTotal} total={calc.gastosTotal3} fmt={formatearMonedaEval} labelBg={EXC.red} labelColor={EXC.white} cellBg={EXC.redLight} cellColor={EXC.red} bold totalBg={EXC.totalBg} totalColor={EXC.red} />
+              {FilaGasto({label: "Costo de ventas / COGS (insumos, mercadería)", editable: (false), val1: (calc.cogs[0]), val2: (calc.cogs[1]), val3: (calc.cogs[2]), total: (calc.cogsTotal3)})}
+              {FilaGasto({label: "Gastos operativos (personal, alquiler, utilities)", k: "gastos_operativos_ano1", val2: (calc.opex[1]), val3: (calc.opex[2]), total: (opexTotal3)})}
+              {FilaGasto({label: "Licencias, software, cloud, suscripciones", k: "licencias_ano1", val2: (calc.lic[1]), val3: (calc.lic[2]), total: (licTotal3)})}
+              {FilaGasto({label: "Gastos de desarrollo (TI)", labelColor: (EXC.red), k: "gastos_desarrollo_ano1", val2: (calc.dev[1]), val3: (calc.dev[2]), total: (devTotal3)})}
+              {FilaGasto({label: "Otros gastos / contingencia", k: "otros_gastos_ano1", val2: (calc.otros[1]), val3: (calc.otros[2]), total: (otrosTotal3)})}
+              {FilaEstado({label: "  TOTAL GASTOS", vals: (calc.gastosTotal), total: (calc.gastosTotal3), fmt: (formatearMonedaEval), labelBg: (EXC.red), labelColor: (EXC.white), cellBg: (EXC.redLight), cellColor: (EXC.red), bold: true, totalBg: (EXC.totalBg), totalColor: (EXC.red)})}
               <ExcBarraLabel bg={EXC.navy} size={10.5}>INVERSIÓN INICIAL (CapEx)</ExcBarraLabel>
               <tr>
                 <ExcCelda>Inversión inicial (solo Año 1: desarrollo, hardware, setup)</ExcCelda>
@@ -2620,24 +2620,24 @@ function EvaluacionFinancieraPanel({ proyecto, evaluacion, paisTexto, puedeEdita
                   {/* 📊 Estado de Resultados (P&L) */}
                   <ExcBarraLabel bg={EXC.navy}>  📊  ESTADO DE RESULTADOS DEL PROYECTO  (P&amp;L)</ExcBarraLabel>
                   <ExcFilaEncabezado bg={EXC.navy} cols={["Concepto", "AÑO 1", "AÑO 2", "AÑO 3", "TOTAL 3 AÑOS"]} />
-                  <FilaEstado label="Ingresos Totales" vals={calc.ingresos} total={calc.ingresosTotal3} fmt={formatearMonedaEval} cellBg={EXC.greenLight} cellColor={EXC.green} bold />
-                  <FilaEstado label="(-) Costo de Ventas / COGS" vals={calc.cogs} total={calc.cogsTotal3} fmt={formatearMonedaEval} cellBg={EXC.redLight} cellColor={EXC.red} />
-                  <FilaEstado label="  ★  MARGEN BRUTO" vals={calc.margenBruto} total={calc.margenBrutoTotal3} fmt={formatearMonedaEval} cellBg={EXC.tealLight} cellColor={EXC.teal} bold size={11} />
-                  <FilaEstado label="     Margen Bruto (%)" vals={calc.margenBrutoPct} total={margenBrutoPctTotal} fmt={n => formatearPctEval(n)} cellBg={EXC.tealLight} cellColor={EXC.teal} />
-                  <FilaEstado label="(-) Gastos Operativos (personal, rent, utilities)" vals={calc.opex} fmt={formatearMonedaEval} cellBg={EXC.redLight} cellColor={EXC.red} total={opexTotal3} />
-                  <FilaEstado label="(+) Ahorros operativos / eficiencias generadas" vals={calc.ahorros} fmt={formatearMonedaEval} cellBg={EXC.redLight} cellColor={EXC.red} total={ahorrosTotal3} />
-                  <FilaEstado label="(-) Licencias, Software, Cloud" vals={calc.lic} fmt={formatearMonedaEval} cellBg={EXC.redLight} cellColor={EXC.red} total={licTotal3} />
-                  <FilaEstado label="(-) Gastos de desarrollo (TI)" vals={calc.dev} fmt={formatearMonedaEval} cellBg={EXC.redLight} cellColor={EXC.red} total={devTotal3} />
-                  <FilaEstado label="(-) Otros gastos / contingencia" vals={calc.otros} fmt={formatearMonedaEval} cellBg={EXC.redLight} cellColor={EXC.red} total={otrosTotal3} />
-                  <FilaEstado label="  BENEFICIO OPERATIVO (EBITDA)" vals={calc.ebitda} total={calc.ebitdaTotal3} fmt={formatearMonedaEval} labelBg={EXC.blue} labelColor={EXC.white} cellBg={EXC.totalBg} cellColor={EXC.navy} bold size={11} />
-                  <FilaEstado label="     Margen EBITDA (%)" vals={calc.margenEbitdaPct} total={margenEbitdaPctTotal} fmt={n => formatearPctEval(n)} cellBg={EXC.totalBg} cellColor={EXC.blue} />
+                  {FilaEstado({label: "Ingresos Totales", vals: (calc.ingresos), total: (calc.ingresosTotal3), fmt: (formatearMonedaEval), cellBg: (EXC.greenLight), cellColor: (EXC.green), bold: true})}
+                  {FilaEstado({label: "(-) Costo de Ventas / COGS", vals: (calc.cogs), total: (calc.cogsTotal3), fmt: (formatearMonedaEval), cellBg: (EXC.redLight), cellColor: (EXC.red)})}
+                  {FilaEstado({label: "  ★  MARGEN BRUTO", vals: (calc.margenBruto), total: (calc.margenBrutoTotal3), fmt: (formatearMonedaEval), cellBg: (EXC.tealLight), cellColor: (EXC.teal), bold: true, size: (11)})}
+                  {FilaEstado({label: "     Margen Bruto (%)", vals: (calc.margenBrutoPct), total: (margenBrutoPctTotal), fmt: (n => formatearPctEval(n)), cellBg: (EXC.tealLight), cellColor: (EXC.teal)})}
+                  {FilaEstado({label: "(-) Gastos Operativos (personal, rent, utilities)", vals: (calc.opex), fmt: (formatearMonedaEval), cellBg: (EXC.redLight), cellColor: (EXC.red), total: (opexTotal3)})}
+                  {FilaEstado({label: "(+) Ahorros operativos / eficiencias generadas", vals: (calc.ahorros), fmt: (formatearMonedaEval), cellBg: (EXC.redLight), cellColor: (EXC.red), total: (ahorrosTotal3)})}
+                  {FilaEstado({label: "(-) Licencias, Software, Cloud", vals: (calc.lic), fmt: (formatearMonedaEval), cellBg: (EXC.redLight), cellColor: (EXC.red), total: (licTotal3)})}
+                  {FilaEstado({label: "(-) Gastos de desarrollo (TI)", vals: (calc.dev), fmt: (formatearMonedaEval), cellBg: (EXC.redLight), cellColor: (EXC.red), total: (devTotal3)})}
+                  {FilaEstado({label: "(-) Otros gastos / contingencia", vals: (calc.otros), fmt: (formatearMonedaEval), cellBg: (EXC.redLight), cellColor: (EXC.red), total: (otrosTotal3)})}
+                  {FilaEstado({label: "  BENEFICIO OPERATIVO (EBITDA)", vals: (calc.ebitda), total: (calc.ebitdaTotal3), fmt: (formatearMonedaEval), labelBg: (EXC.blue), labelColor: (EXC.white), cellBg: (EXC.totalBg), cellColor: (EXC.navy), bold: true, size: (11)})}
+                  {FilaEstado({label: "     Margen EBITDA (%)", vals: (calc.margenEbitdaPct), total: (margenEbitdaPctTotal), fmt: (n => formatearPctEval(n)), cellBg: (EXC.totalBg), cellColor: (EXC.blue)})}
 
                   {/* 💰 Flujo de Caja */}
                   <ExcBarraLabel bg={EXC.orange}>  💰  FLUJO DE CAJA DEL PROYECTO</ExcBarraLabel>
                   <ExcFilaEncabezado bg={EXC.navy} cols={["Concepto", "AÑO 1", "AÑO 2", "AÑO 3", "TOTAL 3 AÑOS"]} />
-                  <FilaEstado label="Beneficio Operativo (EBITDA)" vals={calc.ebitda} total={calc.ebitdaTotal3} fmt={formatearMonedaEval} cellBg={EXC.grayBg} cellColor={EXC.grayText} />
-                  <FilaEstado label="(-) Inversión inicial (CapEx)" vals={[-calc.inversion, 0, 0]} total={-calc.inversion} fmt={formatearMonedaEval} cellBg={EXC.grayBg} cellColor={EXC.grayText} totalBg={EXC.totalBg} totalColor={EXC.grayText} />
-                  <FilaEstado label="  FLUJO DE CAJA NETO" vals={calc.flujo} total={calc.flujoTotal3} fmt={formatearMonedaEval} labelBg={EXC.gold} labelColor={EXC.white} cellBg={EXC.yellowBg} cellColor={EXC.grayText} bold size={11} />
+                  {FilaEstado({label: "Beneficio Operativo (EBITDA)", vals: (calc.ebitda), total: (calc.ebitdaTotal3), fmt: (formatearMonedaEval), cellBg: (EXC.grayBg), cellColor: (EXC.grayText)})}
+                  {FilaEstado({label: "(-) Inversión inicial (CapEx)", vals: ([-calc.inversion, 0, 0]), total: (-calc.inversion), fmt: (formatearMonedaEval), cellBg: (EXC.grayBg), cellColor: (EXC.grayText), totalBg: (EXC.totalBg), totalColor: (EXC.grayText)})}
+                  {FilaEstado({label: "  FLUJO DE CAJA NETO", vals: (calc.flujo), total: (calc.flujoTotal3), fmt: (formatearMonedaEval), labelBg: (EXC.gold), labelColor: (EXC.white), cellBg: (EXC.yellowBg), cellColor: (EXC.grayText), bold: true, size: (11)})}
                   <tr>
                     <ExcCelda bg={EXC.yellowBg} color={EXC.orange}>     Flujo de Caja Acumulado</ExcCelda>
                     {calc.acumulado.map((v, i) => <ExcCelda key={i} align="right" bg={EXC.yellowBg} color={EXC.orange}>{formatearMonedaEval(v)}</ExcCelda>)}
