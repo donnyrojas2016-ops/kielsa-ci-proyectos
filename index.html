@@ -1452,7 +1452,7 @@ function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, respon
                         <td style={fvCampoStyle}>Categoría</td>
                         <td style={fvValorStyle}>
                           <select value={d.categoria} onChange={e => updateField(i,"categoria",e.target.value)} style={inputTabla}>
-                            {CATEGORIAS.map(c => <option key={c}>{c}</option>)}
+                            {categoriasEfectivas.map(c => <option key={c}>{c}</option>)}
                           </select>
                         </td>
                       </tr>
@@ -1722,7 +1722,7 @@ function ProjectModal({ paises, session, areasCatalogo, areasDisponibles, respon
 }
 
 /* ---------- Confirmar eliminación ---------- */
-function ConfirmDelete({ nombre, onConfirm, onClose, deleting }) {
+function ConfirmDelete({ nombre, onConfirm, onClose, deleting, titulo = "Eliminar proyecto", nota }) {
   return (
     <div style={{position:"fixed",inset:0,background:"rgba(15,23,42,.6)",zIndex:600,display:"flex",alignItems:"center",justifyContent:"center"}} onClick={e => e.target === e.currentTarget && onClose()}>
       <div style={{background:y.surface,borderRadius:12,padding:"1.5rem",width:380,boxShadow:"0 20px 50px rgba(0,0,0,.3)"}}>
@@ -1730,10 +1730,11 @@ function ConfirmDelete({ nombre, onConfirm, onClose, deleting }) {
           <div style={{width:38,height:38,borderRadius:10,background:y.dangerBg,display:"flex",alignItems:"center",justifyContent:"center"}}>
             <i className="ti ti-trash" style={{fontSize:18,color:y.danger}}/>
           </div>
-          <strong style={{fontSize:15,color:y.text}}>Eliminar proyecto</strong>
+          <strong style={{fontSize:15,color:y.text}}>{titulo}</strong>
         </div>
         <div style={{fontSize:13,color:y.text2,marginBottom:20}}>
           ¿Seguro que deseas eliminar <strong>{nombre}</strong>? Esta acción no se puede deshacer.
+          {nota && <div style={{marginTop:8,fontSize:12,color:y.text3}}>{nota}</div>}
         </div>
         <div style={{display:"flex",justifyContent:"flex-end",gap:8}}>
           <Btn onClick={onClose} disabled={deleting}>Cancelar</Btn>
@@ -1861,10 +1862,12 @@ function UsuarioFormModal({ paises, editUser, editPaisIds, onClose, onSaved }) {
   );
 }
 
-function UsuariosView({ paises, usuarioPaises, usuarioPaisesDisponibles, onChanged }) {
+function UsuariosView({ paises, usuarioPaises, usuarioPaisesDisponibles, onChanged, session }) {
   const [usuarios, setUsuarios] = useState([]);
   const [loading, setLoading] = useState(true);
   const [formAbierto, setFormAbierto] = useState(null); // null | {} (nuevo) | usuario (editar)
+  const [toDelete, setToDelete] = useState(null);
+  const [deleting, setDeleting] = useState(false);
 
   const cargar = async () => {
     setLoading(true);
@@ -1895,6 +1898,27 @@ function UsuariosView({ paises, usuarioPaises, usuarioPaisesDisponibles, onChang
     } catch (e) {
       setUsuarios(prev => prev.map(x => x.id === u.id ? { ...x, estado: u.estado } : x));
       alert("No se pudo cambiar el estado: " + (e.message || e));
+    }
+  };
+
+  // Elimina el usuario y, para no dejar registros huérfanos, también su fila de rol en
+  // Accesos (proyecto_permisos) y sus países asignados (proyecto_usuario_paises) — así
+  // "Accesos" queda al día solo, sin tener que borrar nada aparte ahí. Estas dos tablas
+  // son opcionales (ver README), así que si todavía no existen simplemente no hacen nada.
+  const eliminar = async () => {
+    setDeleting(true);
+    try {
+      const { error } = await supabase.from("usuarios").delete().eq("id", toDelete.id);
+      if (error) throw error;
+      try { await supabase.from("proyecto_permisos").delete().eq("usuarioId", toDelete.id); } catch (e) { /* tabla opcional */ }
+      try { await supabase.from("proyecto_usuario_paises").delete().eq("usuarioId", toDelete.id); } catch (e) { /* tabla opcional */ }
+      setToDelete(null);
+      await cargar();
+      onChanged && onChanged();
+    } catch (e) {
+      alert("No se pudo eliminar el usuario: " + (e.message || e));
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -1948,6 +1972,9 @@ function UsuariosView({ paises, usuarioPaises, usuarioPaisesDisponibles, onChang
                     <Btn sm onClick={() => setFormAbierto(u)}><i className="ti ti-pencil"/> Editar</Btn>{" "}
                     <Btn sm onClick={() => toggleEstado(u)}>
                       <i className={"ti "+(u.estado === "Activo" ? "ti-lock" : "ti-lock-open")}/> {u.estado === "Activo" ? "Inactivar" : "Activar"}
+                    </Btn>{" "}
+                    <Btn sm danger disabled={session && u.id === session.id} title={session && u.id === session.id ? "No puedes eliminar tu propia cuenta mientras tienes la sesión abierta" : "Eliminar usuario"} onClick={() => setToDelete(u)}>
+                      <i className="ti ti-trash"/>
                     </Btn>
                   </td>
                 </tr>
@@ -1963,6 +1990,16 @@ function UsuariosView({ paises, usuarioPaises, usuarioPaisesDisponibles, onChang
           editPaisIds={formAbierto && formAbierto.id ? paisesDe(formAbierto.id).map(p => p.id) : []}
           onClose={() => setFormAbierto(null)}
           onSaved={() => { cargar(); onChanged && onChanged(); }}
+        />
+      )}
+      {toDelete && (
+        <ConfirmDelete
+          titulo="Eliminar usuario"
+          nombre={toDelete.nombre || toDelete.usuario}
+          deleting={deleting}
+          nota='También se quita su rol en "Accesos" y sus países asignados, si los tenía.'
+          onConfirm={eliminar}
+          onClose={() => setToDelete(null)}
         />
       )}
     </Card>
@@ -2815,7 +2852,8 @@ function EvaluacionFinancieraView({ proyectos, paises, evaluaciones, puedeEditar
    "integracion_comentarios" en vez de "proyectos" / "proyecto_tareas" / "proyecto_comentarios").
    Reutiliza los mismos componentes (ProjectModal, PlanAccionPanel, ConfirmDelete) generalizados
    con props de nombre de tabla, en vez de duplicar ese código. ---------- */
-function IntegracionProyectosView({ paises, areasCatalogo, areasDisponibles, responsables, responsablesDisponibles, session, miRol }) {
+function IntegracionProyectosView({ paises, areasCatalogo, areasDisponibles, categoriasCatalogo, categoriasDisponibles, responsables, responsablesDisponibles, session, miRol }) {
+  const categoriasEfectivas = (categoriasDisponibles && categoriasCatalogo && categoriasCatalogo.length > 0) ? categoriasCatalogo.map(c => c.nombre) : CATEGORIAS;
   const TABLA_PROYECTOS = "proyectos_integracion";
   const TABLA_TAREAS = "integracion_tareas";
   const TABLA_COMENTARIOS = "integracion_comentarios";
@@ -3001,7 +3039,7 @@ function IntegracionProyectosView({ paises, areasCatalogo, areasDisponibles, res
             <React.Fragment>
               <select value={filtroCategoria} onChange={e => setFiltroCategoria(e.target.value)} style={{fontSize:11,padding:"0.28rem 0.55rem",borderRadius:6,border:"1px solid "+y.border2,color:y.text2}}>
                 <option value="">Todas las categorías</option>
-                {CATEGORIAS.map(c => <option key={c}>{c}</option>)}
+                {categoriasEfectivas.map(c => <option key={c}>{c}</option>)}
               </select>
               <select value={filtroEstado} onChange={e => setFiltroEstado(e.target.value)} style={{fontSize:11,padding:"0.28rem 0.55rem",borderRadius:6,border:"1px solid "+y.border2,color:y.text2}}>
                 <option value="">Todos los estados</option>
@@ -3099,6 +3137,8 @@ function IntegracionProyectosView({ paises, areasCatalogo, areasDisponibles, res
           session={session}
           areasCatalogo={areasCatalogo}
           areasDisponibles={areasDisponibles}
+          categoriasCatalogo={categoriasCatalogo}
+          categoriasDisponibles={categoriasDisponibles}
           responsables={responsables}
           responsablesDisponibles={responsablesDisponibles}
           editProject={modal.mode === "edit" ? modal.project : null}
@@ -3130,6 +3170,7 @@ function Sidebar({ vista, setVista, miRol }) {
     { key:"usuarios", label:"Usuarios", icon:"ti-users", adminOnly:true },
     { key:"accesos", label:"Accesos", icon:"ti-shield-lock", adminOnly:true },
     { key:"areas", label:"Áreas", icon:"ti-building", adminOnly:true },
+    { key:"categorias", label:"Categorías", icon:"ti-tag", adminOnly:true },
     { key:"paises", label:"Países", icon:"ti-world", adminOnly:true },
     { key:"responsables", label:"Responsables", icon:"ti-user-check", adminOnly:true },
     { key:"carga", label:"Carga de trabajo", icon:"ti-users-group", adminOnly:false },
@@ -3166,6 +3207,8 @@ function App() {
   const [permisos, setPermisos] = useState([]);
   const [areas, setAreas] = useState([]);
   const [areasDisponibles, setAreasDisponibles] = useState(true);
+  const [categorias, setCategorias] = useState([]);
+  const [categoriasDisponibles, setCategoriasDisponibles] = useState(true);
   const [responsables, setResponsables] = useState([]);
   const [responsablesDisponibles, setResponsablesDisponibles] = useState(true);
   const [usuarioPaises, setUsuarioPaises] = useState([]);
@@ -3198,7 +3241,7 @@ function App() {
       console.error(e);
       alert("No se pudieron cargar los datos: " + (e.message || e));
     }
-    await Promise.all([cargarTareas(), cargarPermisos(), cargarAreas(), cargarResponsables(), cargarUsuarioPaises(), cargarEvaluacionesFinancieras()]);
+    await Promise.all([cargarTareas(), cargarPermisos(), cargarAreas(), cargarCategorias(), cargarResponsables(), cargarUsuarioPaises(), cargarEvaluacionesFinancieras()]);
     setLoading(false);
   };
 
@@ -3251,6 +3294,19 @@ function App() {
     }
   };
 
+  const cargarCategorias = async () => {
+    try {
+      const { data, error } = await supabase.from("proyecto_categorias").select("*").order("nombre");
+      if (error) throw error;
+      setCategorias(data || []);
+      setCategoriasDisponibles(true);
+    } catch (e) {
+      // Tabla todavía no creada en Supabase: el formulario sigue usando la lista fija de siempre.
+      console.warn("proyecto_categorias no disponible:", e.message || e);
+      setCategoriasDisponibles(false);
+    }
+  };
+
   const cargarResponsables = async () => {
     try {
       const { data, error } = await supabase.from("proyecto_responsables").select("*").order("nombre");
@@ -3298,6 +3354,7 @@ function App() {
   }, [permisos, session]);
   const puedeEditar = miRol === "admin" || miRol === "editor";
   const puedeEliminar = miRol === "admin";
+  const categoriasEfectivas = (categoriasDisponibles && categorias && categorias.length > 0) ? categorias.map(c => c.nombre) : CATEGORIAS;
 
   const tareasPorProyecto = useMemo(() => {
     const map = {};
@@ -3471,9 +3528,10 @@ function App() {
         <Sidebar vista={vista} setVista={setVista} miRol={miRol} />
         <div style={{flex:1,minWidth:0,padding:"1.25rem"}}>
         <div style={{maxWidth:1400,margin:"0 auto"}}>
-        {vista === "usuarios" && <UsuariosView paises={paises} usuarioPaises={usuarioPaises} usuarioPaisesDisponibles={usuarioPaisesDisponibles} onChanged={() => { cargarUsuarioPaises(); }} />}
+        {vista === "usuarios" && <UsuariosView paises={paises} usuarioPaises={usuarioPaises} usuarioPaisesDisponibles={usuarioPaisesDisponibles} onChanged={() => { cargarUsuarioPaises(); cargarPermisos(); }} session={session} />}
         {vista === "accesos" && <AccesosView session={session} onChanged={cargarPermisos} />}
         {vista === "areas" && <CatalogoView titulo="Áreas" descripcion="Lista de áreas para asignar a un proyecto" icono="ti-building" tabla="proyecto_areas" onChanged={cargarAreas} />}
+        {vista === "categorias" && <CatalogoView titulo="Categorías" descripcion="Categorías para asignar a un proyecto (Proyectos e Integración de Proyectos)" icono="ti-tag" tabla="proyecto_categorias" onChanged={cargarCategorias} />}
         {vista === "paises" && <CatalogoView titulo="Países" descripcion="Países para asignar a un proyecto" icono="ti-world" tabla="paises" onChanged={cargarPaises} />}
         {vista === "responsables" && <CatalogoView titulo="Responsables" descripcion="Lista de responsables para asignar a un proyecto" icono="ti-user-check" tabla="proyecto_responsables" onChanged={cargarResponsables} />}
         {vista === "carga" && <CargaTrabajoView tareas={tareas} proyectos={proyectos} />}
@@ -3482,6 +3540,8 @@ function App() {
             paises={paises}
             areasCatalogo={areas}
             areasDisponibles={areasDisponibles}
+            categoriasCatalogo={categorias}
+            categoriasDisponibles={categoriasDisponibles}
             responsables={responsables}
             responsablesDisponibles={responsablesDisponibles}
             session={session}
@@ -3528,7 +3588,7 @@ function App() {
 
             {/* Resumen por categoría */}
             <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:16}}>
-              {CATEGORIAS.map(cat => {
+              {categoriasEfectivas.map(cat => {
                 const items = proyectos.filter(p => p.categoria === cat);
                 const avance = items.length ? Math.round(items.reduce((s,p) => s+avanceEfectivo(p, tareasPorProyecto[p.id]),0)/items.length*100) : 0;
                 const { c, bg, ic } = CATEGORIA_ICONOS[cat] || { c:y.gray, bg:y.grayBg, ic:"ti-folder" };
@@ -3603,7 +3663,7 @@ function App() {
                   <React.Fragment>
                     <select value={filtroCategoria} onChange={e => setFiltroCategoria(e.target.value)} style={{fontSize:11,padding:"0.28rem 0.55rem",borderRadius:6,border:"1px solid "+y.border2,color:y.text2}}>
                       <option value="">Todas las categorías</option>
-                      {CATEGORIAS.map(c => <option key={c}>{c}</option>)}
+                      {categoriasEfectivas.map(c => <option key={c}>{c}</option>)}
                     </select>
                     <select value={filtroEstado} onChange={e => setFiltroEstado(e.target.value)} style={{fontSize:11,padding:"0.28rem 0.55rem",borderRadius:6,border:"1px solid "+y.border2,color:y.text2}}>
                       <option value="">Todos los estados</option>
@@ -3708,6 +3768,8 @@ function App() {
           session={session}
           areasCatalogo={areas}
           areasDisponibles={areasDisponibles}
+          categoriasCatalogo={categorias}
+          categoriasDisponibles={categoriasDisponibles}
           responsables={responsables}
           responsablesDisponibles={responsablesDisponibles}
           editProject={modal.mode === "edit" ? modal.project : null}
