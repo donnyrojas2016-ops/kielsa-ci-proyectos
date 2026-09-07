@@ -1781,7 +1781,7 @@ function UsuarioFormModal({ paises, editUser, editPaisIds, onClose, onSaved }) {
         const { error } = await supabase.from("usuarios").update(payload).eq("id", editUser.id);
         if (error) throw error;
       } else {
-        const { data, error } = await supabase.from("usuarios").insert([{ usuario: usuario.trim(), password: password.trim(), nombre: nombre.trim(), estado }]).select();
+        const { data, error } = await supabase.from("usuarios").insert([{ usuario: usuario.trim(), password: password.trim(), nombre: nombre.trim(), estado }]).select("id,usuario,nombre,estado");
         if (error) throw error;
         usuarioId = data && data[0] && data[0].id;
       }
@@ -1872,7 +1872,7 @@ function UsuariosView({ paises, usuarioPaises, usuarioPaisesDisponibles, onChang
   const cargar = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase.from("usuarios").select("*").order("nombre");
+      const { data, error } = await supabase.from("usuarios").select("id,usuario,nombre,estado").order("nombre");
       if (error) throw error;
       setUsuarios(data || []);
     } catch (e) {
@@ -2019,7 +2019,7 @@ function AccesosView({ session, onChanged }) {
       setLoading(true);
       try {
         const [{ data: us, error: e1 }, { data: pe, error: e2 }] = await Promise.all([
-          supabase.from("usuarios").select("*").order("nombre"),
+          supabase.from("usuarios").select("id,usuario,nombre,estado").order("nombre"),
           supabase.from("proyecto_permisos").select("*")
         ]);
         if (e1) throw e1;
