@@ -1039,6 +1039,55 @@ function PlanAccionPanel({ proyecto, tareasProyecto, responsables, responsablesD
       margin: { left: 14, right: 14 },
       columnStyles: { 7: { cellWidth: 55 } }
     });
+
+    // Resumen de avance y Actividades por estado (mismo contenido del panel
+    // derecho de la pantalla), agregados debajo de la tabla de tareas.
+    // Si no cabe en la página actual (muchas tareas), se agrega una página nueva.
+    const pageHeight = doc.internal.pageSize.getHeight();
+    let yResumen = doc.lastAutoTable.finalY + 8;
+    if (yResumen > pageHeight - 55) {
+      doc.addPage();
+      yResumen = 18;
+    }
+    doc.autoTable({
+      head: [["Resumen de avance", ""]],
+      body: [
+        ["Fecha de corte", formatearFechaCorta(hoy)],
+        ["Avance real (ponderado por días)", avanceRealPonderado + "%"],
+        ["Avance planificado a la fecha", avancePlanPonderado != null ? avancePlanPonderado + "%" : "—"],
+        ["Desviación (real - plan)", desviacionGeneral != null ? (desviacionGeneral > 0 ? "+" : "") + desviacionGeneral + "%" : "—"],
+        ["Avance simple (promedio)", avancePctTareas + "%"]
+      ],
+      startY: yResumen,
+      styles: { fontSize: 8.5, cellPadding: 2.5 },
+      headStyles: { fillColor: [30, 77, 183] },
+      margin: { left: 14, right: 14 },
+      tableWidth: 130,
+      columnStyles: { 0: { cellWidth: 90 }, 1: { fontStyle: "bold", halign: "right" } }
+    });
+
+    doc.autoTable({
+      head: [["Actividades por estado", ""]],
+      body: [
+        ...ESTADOS_RESUMEN.map(estado => [
+          estado,
+          conteoEstados[estado] + " (" + (totalTareas ? Math.round((conteoEstados[estado] / totalTareas) * 100) : 0) + "%)"
+        ]),
+        ["Total", String(totalTareas)]
+      ],
+      startY: yResumen,
+      styles: { fontSize: 8.5, cellPadding: 2.5 },
+      headStyles: { fillColor: [120, 120, 120] },
+      margin: { left: 150, right: 14 },
+      tableWidth: 130,
+      columnStyles: { 0: { cellWidth: 90 }, 1: { fontStyle: "bold", halign: "right" } },
+      didParseCell: (data) => {
+        if (data.row.index === ESTADOS_RESUMEN.length && data.section === "body") {
+          data.cell.styles.fontStyle = "bold";
+        }
+      }
+    });
+
     doc.save("Plan_" + nombreArchivoBase + ".pdf");
   };
 
