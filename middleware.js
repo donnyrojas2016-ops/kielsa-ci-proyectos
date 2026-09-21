@@ -1,18 +1,18 @@
 // middleware.js - Kielsa CI — Proyectos
-// Exige usuario/contraseña (HTTP Basic Auth) antes de servir cualquier archivo del sitio,
-// incluido index.html. Así la app deja de ser públicamente accesible sin credencial.
+// Exige usuario/contrasena (HTTP Basic Auth) antes de servir cualquier archivo del sitio,
+// incluido index.html. Asi la app deja de ser publicamente accesible sin credencial.
 //
-// Configuración requerida en Vercel (Project Settings -> Environment Variables),
+// Configuracion requerida en Vercel (Project Settings -> Environment Variables),
 // para los entornos Production y Preview:
-//   SITE_USER = usuario que compartirás con tu equipo
-//   SITE_PASS = contraseña que compartirás con tu equipo
+//   SITE_USER = usuario que compartiras con tu equipo
+//   SITE_PASS = contrasena que compartiras con tu equipo
 //
-// Si esas variables no están configuradas, el middleware NO bloquea nada (para evitar
-// que un olvido de configuración te deje fuera de tu propia app).
+// Si esas variables no estan configuradas, el middleware NO bloquea nada (para evitar
+// que un olvido de configuracion te deje fuera de tu propia app).
 
 import { next } from '@vercel/functions';
 
-export default function middleware(request) {
+export default function middleware(request) {return next(); // TEMPORAL: bypass de Basic Auth a pedido de Donny (21-sep-2026). Para reactivar, borra esta linea.
   const expectedUser = process.env.SITE_USER;
   const expectedPass = process.env.SITE_PASS;
 
@@ -40,7 +40,7 @@ export default function middleware(request) {
     }
   }
 
-  return new Response('Acceso restringido — Kielsa Farmacéutica CI Proyectos', {
+  return new Response('Acceso restringido — Kielsa Farmaceutica CI Proyectos', {
     status: 401,
     headers: {
       'WWW-Authenticate': 'Basic realm="Kielsa CI Proyectos", charset="UTF-8"',
